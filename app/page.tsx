@@ -36,10 +36,10 @@ export default function Home() {
         </div>
 
         <h2 className="text-6xl md:text-8xl font-medium tracking-tighter mb-10 max-w-5xl text-pretty leading-[0.95] select-none">
-          The curated community <br className="hidden md:block" /> for <span className="bg-gradient-to-b from-white via-zinc-200 to-zinc-600 bg-clip-text text-transparent italic pr-2">meaningful connections.</span>
+          The curated community <br className="hidden md:block" /> for <span className="font-playfair bg-gradient-to-b from-white via-zinc-200 to-zinc-600 bg-clip-text text-transparent italic pr-2">meaningful connections.</span>
         </h2>
 
-        <p className="text-xl md:text-2xl text-zinc-400/90 max-w-2xl mb-14 font-light leading-relaxed">
+        <p className="font-dm text-xl md:text-2xl text-zinc-400/90 max-w-2xl mb-14 font-light leading-relaxed">
             A private space for professionals, creators, and visionaries. 
             Connect through voice, video, and serendipity.
         </p>
