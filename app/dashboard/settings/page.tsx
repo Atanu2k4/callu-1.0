@@ -337,12 +337,7 @@ export default function SettingsPage() {
               </div>
               <div className="flex justify-between py-2">
                 <span className="text-zinc-400">Member Since</span>
-                <span className="text-white">
-                  {user?.createdAt 
-                    ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-                    : "Recently"
-                  }
-                </span>
+                <span className="text-white">2026</span>
               </div>
             </div>
           </div>
