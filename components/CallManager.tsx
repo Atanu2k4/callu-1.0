@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSocket } from "@/context/SocketContext";
 import { useAuth } from "@/context/AuthContext";
 import { useCall } from "@/context/CallContext";
-import { Phone, PhoneOff, Video, Mic, MicOff, VideoOff, PhoneIncoming } from "lucide-react";
+import { Phone, PhoneOff, Mic, MicOff, PhoneIncoming } from "lucide-react";
 
 export default function CallManager() {
   const { user } = useAuth();
@@ -14,7 +14,6 @@ export default function CallManager() {
   const [callAccepted, setCallAccepted] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isMicOn, setIsMicOn] = useState(true);
-  const [isVideoOn, setIsVideoOn] = useState(true);
   
   const myVideo = useRef<HTMLVideoElement>(null);
   const userVideo = useRef<HTMLVideoElement>(null);
@@ -34,9 +33,9 @@ export default function CallManager() {
   }, [socket]);
 
   const startCall = async (idToCall: string) => {
-    // 1. Get Media
+    // 1. Get Media - Audio only for voice calls
     try {
-      const currentStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const currentStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
       setStream(currentStream);
       if (myVideo.current) myVideo.current.srcObject = currentStream;
 
@@ -103,7 +102,7 @@ export default function CallManager() {
     setCallAccepted(true);
 
     try {
-       const currentStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+       const currentStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
        setStream(currentStream);
        if (myVideo.current) myVideo.current.srcObject = currentStream;
 
@@ -173,12 +172,12 @@ export default function CallManager() {
   if (!incomingCall && !outgoingCallData) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4 w-full max-w-4xl flex flex-col items-center overflow-hidden relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-8 w-full max-w-md mx-4 flex flex-col items-center relative shadow-2xl">
         
         {/* Connection Status */}
         {!callAccepted && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900 z-10">
+          <div className="flex flex-col items-center justify-center py-8">
              {/* Show ringing animation for incoming call */}
              {incomingCall && (
                <div className="relative mb-8">
@@ -202,67 +201,88 @@ export default function CallManager() {
              )}
              {incomingCall ? (
                 <>
-                  <h3 className="text-2xl text-white mb-2">{incomingCall.name} is calling...</h3>
-                  <div className="flex gap-4 mt-8">
-                     <button onClick={endCall} className="bg-red-500 hover:bg-red-600 p-4 rounded-full transition-all">
-                       <PhoneOff className="text-white" size={32} />
-                     </button>
-                     <button onClick={answerCall} className="bg-green-500 hover:bg-green-600 p-4 rounded-full transition-all animate-bounce">
-                       <Phone className="text-white" size={32} />
-                     </button>
+                  <h3 className="text-2xl font-medium text-white mb-1 text-center">{incomingCall.name}</h3>
+                  <p className="text-zinc-400 mb-8">Incoming voice call...</p>
+                  <div className="flex gap-6">
+                     <div className="flex flex-col items-center gap-2">
+                       <button onClick={endCall} className="bg-red-500 hover:bg-red-600 p-5 rounded-full transition-all shadow-lg hover:shadow-red-500/50">
+                         <PhoneOff className="text-white" size={28} />
+                       </button>
+                       <span className="text-xs text-zinc-500">Decline</span>
+                     </div>
+                     <div className="flex flex-col items-center gap-2">
+                       <button onClick={answerCall} className="bg-green-500 hover:bg-green-600 p-5 rounded-full transition-all animate-bounce shadow-lg hover:shadow-green-500/50">
+                         <Phone className="text-white" size={28} />
+                       </button>
+                       <span className="text-xs text-zinc-500">Accept</span>
+                     </div>
                   </div>
                 </>
              ) : (
                 <>
-                  <h3 className="text-2xl text-white mb-2">Calling {outgoingCallData?.userName}...</h3>
-                  <button onClick={endCall} className="bg-red-500 hover:bg-red-600 p-4 rounded-full mt-8">
-                      <PhoneOff className="text-white" size={32} />
-                  </button>
+                  <h3 className="text-2xl font-medium text-white mb-1 text-center">{outgoingCallData?.userName}</h3>
+                  <p className="text-zinc-400 mb-8">Calling...</p>
+                  <div className="flex flex-col items-center gap-2">
+                    <button onClick={endCall} className="bg-red-500 hover:bg-red-600 p-5 rounded-full transition-all shadow-lg hover:shadow-red-500/50">
+                      <PhoneOff className="text-white" size={28} />
+                    </button>
+                    <span className="text-xs text-zinc-500">End call</span>
+                  </div>
                 </>
              )}
           </div>
         )}
 
-        {/* Video Grid */}
-        <div className={`grid ${callAccepted ? 'grid-cols-2' : 'hidden'} gap-4 w-full h-[500px] relative`}>
-            {/* Connected status indicator */}
-            {callAccepted && (
-              <div className="absolute top-4 right-4 z-10 bg-emerald-500/20 backdrop-blur-sm rounded-full px-4 py-2 border border-emerald-500/30">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                  <span className="text-xs text-emerald-400 font-medium">Connected</span>
-                </div>
-              </div>
-            )}
-            
-            {/* My Video */}
-            <div className="relative bg-zinc-950 rounded-2xl overflow-hidden border border-zinc-800">
-                <video playsInline muted ref={myVideo} autoPlay className="w-full h-full object-cover" />
-                <span className="absolute bottom-4 left-4 bg-black/50 px-3 py-1 rounded-full text-xs text-white">You</span>
-            </div>
-             {/* User Video */}
-            <div className="relative bg-zinc-950 rounded-2xl overflow-hidden border border-zinc-800">
-               {callAccepted && <video playsInline ref={userVideo} autoPlay className="w-full h-full object-cover" />}
-               <span className="absolute bottom-4 left-4 bg-black/50 px-3 py-1 rounded-full text-xs text-white">
-                  {incomingCall?.name || outgoingCallData?.userName}
-               </span>
-            </div>
-        </div>
-
-        {/* Controls */}
+        {/* Audio Call Connected View */}
         {callAccepted && (
-            <div className="flex items-center gap-4 mt-6">
-                <button onClick={() => setIsMicOn(!isMicOn)} className={`p-4 rounded-full ${!isMicOn ? 'bg-red-500 text-white' : 'bg-zinc-800 text-zinc-400'}`}>
-                    {isMicOn ? <Mic /> : <MicOff />}
-                </button>
-                <button onClick={endCall} className="p-4 rounded-full bg-red-500 text-white hover:bg-red-600">
-                    <PhoneOff size={24} />
-                </button>
-                <button onClick={() => setIsVideoOn(!isVideoOn)} className={`p-4 rounded-full ${!isVideoOn ? 'bg-red-500 text-white' : 'bg-zinc-800 text-zinc-400'}`}>
-                    {isVideoOn ? <Video /> : <VideoOff />}
-                </button>
+          <div className="flex flex-col items-center py-8 w-full">
+            <div className="w-32 h-32 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center mb-4 shadow-lg shadow-emerald-500/30">
+              <Phone className="w-16 h-16 text-white" />
             </div>
+            <h3 className="text-2xl font-medium text-white mb-1">{incomingCall?.name || outgoingCallData?.userName}</h3>
+            <div className="flex items-center gap-2 mb-8">
+              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+              <span className="text-sm text-emerald-400">Connected</span>
+            </div>
+            
+            {/* Call Controls */}
+            <div className="flex items-center gap-6">
+              <div className="flex flex-col items-center gap-2">
+                <button 
+                  onClick={() => {
+                    const audioTrack = stream?.getAudioTracks()[0];
+                    if (audioTrack) {
+                      audioTrack.enabled = !isMicOn;
+                      setIsMicOn(!isMicOn);
+                    }
+                  }} 
+                  className={`p-4 rounded-full transition-all ${
+                    !isMicOn ? 'bg-red-500 text-white shadow-lg shadow-red-500/50' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                  }`}
+                >
+                  {isMicOn ? <Mic size={24} /> : <MicOff size={24} />}
+                </button>
+                <span className="text-xs text-zinc-500">{isMicOn ? 'Mute' : 'Unmute'}</span>
+              </div>
+              
+              <div className="flex flex-col items-center gap-2">
+                <button 
+                  onClick={endCall} 
+                  className="p-5 rounded-full bg-red-500 text-white hover:bg-red-600 transition-all shadow-lg hover:shadow-red-500/50"
+                >
+                  <PhoneOff size={28} />
+                </button>
+                <span className="text-xs text-zinc-500">End call</span>
+              </div>
+            </div>
+          </div>
         )}
+        
+        {/* Hidden video elements for audio-only call */}
+        <div className="hidden">
+          <video playsInline muted ref={myVideo} autoPlay />
+          <video playsInline ref={userVideo} autoPlay />
+        </div>
       </div>
     </div>
   );
