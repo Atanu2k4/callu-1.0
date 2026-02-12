@@ -15,7 +15,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
+  { icon: LayoutDashboard, label: "Community", href: "/dashboard" },
   { icon: PhoneCall, label: "Calls", href: "/dashboard/calls" },
   { icon: Wallet, label: "Wallet", href: "/dashboard/wallet" },
   { icon: Settings, label: "Settings", href: "/dashboard/settings" },
