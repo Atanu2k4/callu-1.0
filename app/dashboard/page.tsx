@@ -100,7 +100,10 @@ export default function DashboardPage() {
                         <span className="text-3xl font-bold text-white">{member.name[0].toUpperCase()}</span>
                       )}
                    </div>
-                   <h3 className="text-xl font-medium text-white group-hover:text-emerald-400 transition-colors">{member.name}</h3>
+                   <div className="flex items-center justify-center gap-2">
+                     <h3 className="text-xl font-medium text-white group-hover:text-emerald-400 transition-colors">{member.name}</h3>
+                     <img src="/Verification-Blue-Tick-PNG.webp" alt="Verified" className="w-5 h-5 flex-shrink-0" />
+                   </div>
                    <p className="text-xs text-zinc-500 uppercase tracking-widest mt-1">Verified Member</p>
                 </div>
 

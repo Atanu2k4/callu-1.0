@@ -119,7 +119,10 @@ export function DashboardSidebar() {
                     animate={{ opacity: 1, x: 0 }}
                     className="overflow-hidden"
                    >
-                    <p className="text-sm font-medium text-white truncate max-w-[120px]">{user.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-medium text-white truncate max-w-[100px]">{user.name}</p>
+                      <img src="/Verification-Blue-Tick-PNG.webp" alt="Verified" className="w-4 h-4 flex-shrink-0" />
+                    </div>
                     <p className="text-xs text-zinc-500 truncate max-w-[120px]">{user.email}</p>
                    </motion.div>
               )}

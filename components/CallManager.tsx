@@ -401,7 +401,10 @@ export default function CallManager() {
              )}
              {incomingCall ? (
                 <>
-                  <h3 className="text-2xl font-medium text-white mb-1 text-center">{incomingCall.name}</h3>
+                  <div className="flex items-center justify-center gap-2 mb-1">
+                    <h3 className="text-2xl font-medium text-white text-center">{incomingCall.name}</h3>
+                    <img src="/Verification-Blue-Tick-PNG.webp" alt="Verified" className="w-6 h-6 flex-shrink-0" />
+                  </div>
                   <p className="text-zinc-400 mb-8">Incoming voice call...</p>
                   <div className="flex gap-6">
                      <div className="flex flex-col items-center gap-2">
@@ -420,7 +423,10 @@ export default function CallManager() {
                 </>
              ) : (
                 <>
-                  <h3 className="text-2xl font-medium text-white mb-1 text-center">{outgoingCallData?.userName}</h3>
+                  <div className="flex items-center justify-center gap-2 mb-1">
+                    <h3 className="text-2xl font-medium text-white text-center">{outgoingCallData?.userName}</h3>
+                    <img src="/Verification-Blue-Tick-PNG.webp" alt="Verified" className="w-6 h-6 flex-shrink-0" />
+                  </div>
                   <p className="text-zinc-400 mb-8">Calling...</p>
                   <div className="flex flex-col items-center gap-2">
                     <button onClick={endCall} className="bg-red-500 hover:bg-red-600 p-5 rounded-full transition-all shadow-lg hover:shadow-red-500/50 cursor-pointer">
@@ -443,7 +449,10 @@ export default function CallManager() {
                 autoplay
               />
             </div>
-            <h3 className="text-2xl font-medium text-white mb-1">{incomingCall?.name || outgoingCallData?.userName}</h3>
+            <div className="flex items-center justify-center gap-2 mb-1">
+              <h3 className="text-2xl font-medium text-white">{incomingCall?.name || outgoingCallData?.userName}</h3>
+              <img src="/Verification-Blue-Tick-PNG.webp" alt="Verified" className="w-6 h-6 flex-shrink-0" />
+            </div>
             <div className="flex items-center gap-2 mb-8">
               <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
               <span className="text-sm text-emerald-400">Connected</span>
