@@ -187,24 +187,25 @@ export default function CallManager() {
           { urls: "stun:stun2.l.google.com:19302" },
           { urls: "stun:stun3.l.google.com:19302" },
           { urls: "stun:stun4.l.google.com:19302" },
-          // Free TURN servers for NAT traversal (OpenRelay)
+          // Metered TURN servers (free tier)
           { 
-            urls: "turn:openrelay.metered.ca:80",
-            username: "openrelayproject",
-            credential: "openrelayproject"
+            urls: "turn:a.relay.metered.ca:80",
+            username: "87a60b73f341b6abffa20ad6",
+            credential: "ePS6V5R5d+xpKOH8"
           },
           { 
-            urls: "turn:openrelay.metered.ca:443",
-            username: "openrelayproject",
-            credential: "openrelayproject"
+            urls: "turn:a.relay.metered.ca:443",
+            username: "87a60b73f341b6abffa20ad6",
+            credential: "ePS6V5R5d+xpKOH8"
           },
           { 
-            urls: "turn:openrelay.metered.ca:443?transport=tcp",
-            username: "openrelayproject",
-            credential: "openrelayproject"
+            urls: "turn:a.relay.metered.ca:443?transport=tcp",
+            username: "87a60b73f341b6abffa20ad6",
+            credential: "ePS6V5R5d+xpKOH8"
           }
         ],
-        iceCandidatePoolSize: 10
+        iceCandidatePoolSize: 10,
+        iceTransportPolicy: "all" // Use both STUN and TURN
       });
       connectionRef.current = peer;
 
@@ -214,22 +215,34 @@ export default function CallManager() {
         console.log("[CALLER] Added track:", track.kind, track.enabled);
       });
 
-      // Monitor connection state with failure recovery
+      // Monitor connection state - don't give up immediately on failure
+      let connectionFailureTimeout: NodeJS.Timeout | null = null;
       peer.onconnectionstatechange = () => {
         console.log("[CALLER] Connection state:", peer.connectionState);
-        if (peer.connectionState === "failed") {
-          console.error("❌ [CALLER] Connection failed! Attempting ICE restart...");
-          // Try to recover by restarting ICE
-          peer.restartIce();
-        } else if (peer.connectionState === "connected") {
+        
+        if (peer.connectionState === "connected") {
           console.log("✅ [CALLER] Connection established successfully!");
+          if (connectionFailureTimeout) clearTimeout(connectionFailureTimeout);
+        } else if (peer.connectionState === "failed") {
+          console.error("❌ [CALLER] Connection failed! Waiting 3s before giving up...");
+          // Give it some time before ending - ICE might still be working
+          connectionFailureTimeout = setTimeout(() => {
+            console.log("❌ [CALLER] Connection still failed after 3s, ending call");
+            endCall();
+          }, 3000);
+        } else if (peer.connectionState === "disconnected") {
+          console.log("⚠️ [CALLER] Connection disconnected, waiting for reconnection...");
         }
       };
 
       peer.oniceconnectionstatechange = () => {
         console.log("[CALLER] ICE connection state:", peer.iceConnectionState);
-        if (peer.iceConnectionState === "failed") {
-          console.error("❌ [CALLER] ICE connection failed! Check network/firewall.");
+        
+        if (peer.iceConnectionState === "connected" || peer.iceConnectionState === "completed") {
+          console.log("✅ [CALLER] ICE connection established!");
+          if (connectionFailureTimeout) clearTimeout(connectionFailureTimeout);
+        } else if (peer.iceConnectionState === "failed") {
+          console.error("❌ [CALLER] ICE connection failed! Network/firewall issue.");
         }
       };
 
@@ -238,11 +251,13 @@ export default function CallManager() {
         console.log("[CALLER] ICE gathering state:", peer.iceGatheringState);
       };
 
-      // Handle ICE
+      // Handle ICE candidates - send them as they're discovered
       peer.onicecandidate = (event) => {
         if (event.candidate) {
-          console.log("[CALLER] Sending ICE candidate");
+          console.log("[CALLER] Sending ICE candidate (type:", event.candidate.type, ")");
           socket?.emit("send-signal", { to: idToCall, signal: { candidate: event.candidate }, from: user?._id });
+        } else {
+          console.log("[CALLER] All ICE candidates have been sent");
         }
       };
 
@@ -296,11 +311,16 @@ export default function CallManager() {
         }
       });
 
-      // Listen for ICE from other side
+      // Listen for ICE from other side - add with error handling
       socket?.on("signal-received", async (data) => {
         if (data.signal.candidate) {
-          console.log("[CALLER] Received ICE candidate from answerer");
-          await peer.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
+          console.log("[CALLER] Received ICE candidate from answerer (type:", data.signal.candidate.type, ")");
+          try {
+            await peer.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
+            console.log("[CALLER] Successfully added ICE candidate");
+          } catch (err) {
+            console.error("[CALLER] Error adding ICE candidate:", err);
+          }
         }
       });
 
@@ -367,24 +387,25 @@ export default function CallManager() {
           { urls: "stun:stun2.l.google.com:19302" },
           { urls: "stun:stun3.l.google.com:19302" },
           { urls: "stun:stun4.l.google.com:19302" },
-          // Free TURN servers for NAT traversal (OpenRelay)
+          // Metered TURN servers (free tier)
           { 
-            urls: "turn:openrelay.metered.ca:80",
-            username: "openrelayproject",
-            credential: "openrelayproject"
+            urls: "turn:a.relay.metered.ca:80",
+            username: "87a60b73f341b6abffa20ad6",
+            credential: "ePS6V5R5d+xpKOH8"
           },
           { 
-            urls: "turn:openrelay.metered.ca:443",
-            username: "openrelayproject",
-            credential: "openrelayproject"
+            urls: "turn:a.relay.metered.ca:443",
+            username: "87a60b73f341b6abffa20ad6",
+            credential: "ePS6V5R5d+xpKOH8"
           },
           { 
-            urls: "turn:openrelay.metered.ca:443?transport=tcp",
-            username: "openrelayproject",
-            credential: "openrelayproject"
+            urls: "turn:a.relay.metered.ca:443?transport=tcp",
+            username: "87a60b73f341b6abffa20ad6",
+            credential: "ePS6V5R5d+xpKOH8"
           }
         ],
-        iceCandidatePoolSize: 10
+        iceCandidatePoolSize: 10,
+        iceTransportPolicy: "all" // Use both STUN and TURN
       });
       connectionRef.current = peer;
 
@@ -394,21 +415,34 @@ export default function CallManager() {
         console.log("[ANSWERER] Added track:", track.kind, track.enabled);
       });
 
-      // Monitor connection state with failure recovery
+      // Monitor connection state - don't give up immediately on failure
+      let connectionFailureTimeout: NodeJS.Timeout | null = null;
       peer.onconnectionstatechange = () => {
         console.log("[ANSWERER] Connection state:", peer.connectionState);
-        if (peer.connectionState === "failed") {
-          console.error("❌ [ANSWERER] Connection failed! Attempting ICE restart...");
-          peer.restartIce();
-        } else if (peer.connectionState === "connected") {
+        
+        if (peer.connectionState === "connected") {
           console.log("✅ [ANSWERER] Connection established successfully!");
+          if (connectionFailureTimeout) clearTimeout(connectionFailureTimeout);
+        } else if (peer.connectionState === "failed") {
+          console.error("❌ [ANSWERER] Connection failed! Waiting 3s before giving up...");
+          // Give it some time before ending - ICE might still be working
+          connectionFailureTimeout = setTimeout(() => {
+            console.log("❌ [ANSWERER] Connection still failed after 3s, ending call");
+            endCall();
+          }, 3000);
+        } else if (peer.connectionState === "disconnected") {
+          console.log("⚠️ [ANSWERER] Connection disconnected, waiting for reconnection...");
         }
       };
 
       peer.oniceconnectionstatechange = () => {
         console.log("[ANSWERER] ICE connection state:", peer.iceConnectionState);
-        if (peer.iceConnectionState === "failed") {
-          console.error("❌ [ANSWERER] ICE connection failed! Check network/firewall.");
+        
+        if (peer.iceConnectionState === "connected" || peer.iceConnectionState === "completed") {
+          console.log("✅ [ANSWERER] ICE connection established!");
+          if (connectionFailureTimeout) clearTimeout(connectionFailureTimeout);
+        } else if (peer.iceConnectionState === "failed") {
+          console.error("❌ [ANSWERER] ICE connection failed! Network/firewall issue.");
         }
       };
 
@@ -419,8 +453,10 @@ export default function CallManager() {
 
       peer.onicecandidate = (event) => {
         if (event.candidate) {
-          console.log("[ANSWERER] Sending ICE candidate");
+          console.log("[ANSWERER] Sending ICE candidate (type:", event.candidate.type, ")");
            socket?.emit("send-signal", { to: incomingCall.from, signal: { candidate: event.candidate }, from: user?._id });
+        } else {
+          console.log("[ANSWERER] All ICE candidates have been sent");
         }
       };
 
@@ -465,11 +501,16 @@ export default function CallManager() {
         from: user?._id
       });
       
-      // Listen for Candidates from caller
+// Listen for Candidates from caller - add with error handling
       socket?.on("signal-received", async (data) => {
          if (data.signal.candidate) {
-            console.log("[ANSWERER] Received ICE candidate from caller");
-            await peer.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
+           console.log("[ANSWERER] Received ICE candidate from caller (type:", data.signal.candidate.type, ")");
+           try {
+             await peer.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
+             console.log("[ANSWERER] Successfully added ICE candidate");
+           } catch (err) {
+             console.error("[ANSWERER] Error adding ICE candidate:", err);
+           }
          }
       });
 
