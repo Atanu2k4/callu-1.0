@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import dbConnect from "@/lib/db";
 import User from "@/models/User";
 
@@ -37,44 +37,24 @@ export async function POST(req: Request) {
     }
 
     const {
-      SMTP_HOST,
-      SMTP_PORT,
-      SMTP_USER,
-      SMTP_PASS,
-      SMTP_FROM,
-      SMTP_SECURE,
+      RESEND_API_KEY,
+      RESEND_FROM_EMAIL,
     } = process.env;
 
-    if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS || !SMTP_FROM) {
+    if (!RESEND_API_KEY || !RESEND_FROM_EMAIL) {
       return NextResponse.json(
-        { message: "Email transport is not configured" },
+        { message: "Email service is not configured" },
         { status: 500 }
       );
     }
 
-    const port = Number(SMTP_PORT);
-    const secure = SMTP_SECURE === "true" || port === 465;
-    const forceIpv4 = process.env.SMTP_FORCE_IPV4 !== "false";
-
-    const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port,
-      secure,
-      auth: {
-        user: SMTP_USER,
-        pass: SMTP_PASS,
-      },
-      tls: {
-        servername: SMTP_HOST,
-      },
-      ...(forceIpv4 ? { family: 4 } : {}),
-    });
+    const resend = new Resend(RESEND_API_KEY);
 
     const callerName = callerUser.name || "A member";
     const callerAvatar = callerUser.avatarConfig?.image || "";
 
     const mailOptions = {
-      from: SMTP_FROM,
+      from: RESEND_FROM_EMAIL,
       to: targetUser.email,
       subject: `${callerName} is trying to reach you on CALLU`,
       text: `${callerName} tried to call you on CALLU. Open ${APP_URL} to connect and start the conversation.`,
@@ -165,41 +145,13 @@ export async function POST(req: Request) {
       `,
     };
 
-    try {
-      await transporter.sendMail(mailOptions);
-    } catch (error: any) {
-      const retryOnStartTls = port !== 587;
-      if (!retryOnStartTls) {
-        throw error;
-      }
-
-      const fallback = nodemailer.createTransport({
-        host: SMTP_HOST,
-        port: 587,
-        secure: false,
-        auth: {
-          user: SMTP_USER,
-          pass: SMTP_PASS,
-        },
-        requireTLS: true,
-        tls: {
-          servername: SMTP_HOST,
-        },
-        ...(forceIpv4 ? { family: 4 } : {}),
-      });
-
-      await fallback.sendMail(mailOptions);
-    }
+    await resend.emails.send(mailOptions);
 
     return NextResponse.json({ message: "Notification sent" }, { status: 200 });
   } catch (error: any) {
     console.error("Notify error:", error);
     return NextResponse.json(
-      {
-        message: "Email send failed",
-        code: error?.code || "UNKNOWN",
-        command: error?.command || "UNKNOWN",
-      },
+      { message: "Email send failed", error: error?.message },
       { status: 500 }
     );
   }
