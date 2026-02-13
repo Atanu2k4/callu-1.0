@@ -4,6 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { SocketProvider } from "@/context/SocketContext";
 import { CallProvider } from "@/context/CallContext";
 import CallManager from "@/components/CallManager";
+import TermsModal from "@/components/TermsModal";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -40,6 +41,7 @@ export default function DashboardLayout({
            </main>
 
            <CallManager />
+           <TermsModal />
         </div>
       </CallProvider>
     </SocketProvider>
