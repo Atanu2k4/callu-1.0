@@ -403,14 +403,30 @@ export function DashboardSidebar() {
                                           ) : (
                                             <Volume2 className="w-3.5 h-3.5 flex-shrink-0 text-zinc-600" />
                                           )}
-                                          <div className={cn(
-                                            "flex-1 overflow-hidden relative text-xs font-medium transition-colors",
-                                            isRoomActive(room._id) ? "text-white" : isLive ? "text-zinc-200" : "text-zinc-500 group-hover:text-zinc-300"
-                                          )}>
-                                            <div className="room-name-scroll whitespace-nowrap">
-                                              <span className="inline-block">{room.name}</span>
-                                              <span className="inline-block ml-4">{room.name}</span>
-                                            </div>
+                                          <div 
+                                            className={cn(
+                                              "flex-1 overflow-hidden relative text-xs font-medium transition-colors",
+                                              isRoomActive(room._id) ? "text-white" : isLive ? "text-zinc-200" : "text-zinc-500 group-hover:text-zinc-300"
+                                            )}
+                                            title={room.name}
+                                            onMouseEnter={(e) => {
+                                              const span = e.currentTarget.querySelector('.room-name-text') as HTMLSpanElement;
+                                              if (span && span.scrollWidth > e.currentTarget.clientWidth) {
+                                                const distance = span.scrollWidth - e.currentTarget.clientWidth;
+                                                span.style.setProperty('--scroll-distance', `-${distance}px`);
+                                                span.classList.add('should-scroll');
+                                              }
+                                            }}
+                                            onMouseLeave={(e) => {
+                                              const span = e.currentTarget.querySelector('.room-name-text') as HTMLSpanElement;
+                                              if (span) {
+                                                span.classList.remove('should-scroll');
+                                              }
+                                            }}
+                                          >
+                                            <span className="room-name-text whitespace-nowrap">
+                                              {room.name}
+                                            </span>
                                           </div>
                                           {!isLive && (
                                             <span className="text-[10px] text-zinc-600 font-medium">0/{room.maxParticipants}</span>
@@ -781,21 +797,22 @@ export function DashboardSidebar() {
 
       {/* CSS for room name scrolling */}
       <style jsx>{`
-        .room-name-scroll {
-          display: inline-flex;
-          animation: scroll-text 12s linear infinite;
+        .room-name-text {
+          display: block;
+          white-space: nowrap;
+          transition: transform 0.5s ease-out;
         }
         
-        .group:not(:hover) .room-name-scroll {
-          animation: none;
+        .room-name-text.should-scroll {
+          animation: slide-reveal 3s ease-in-out infinite;
         }
         
-        @keyframes scroll-text {
-          0% {
-            transform: translateX(0);
+        @keyframes slide-reveal {
+          0%, 100% { 
+            transform: translateX(0); 
           }
-          100% {
-            transform: translateX(-50%);
+          50% { 
+            transform: translateX(var(--scroll-distance, 0)); 
           }
         }
       `}</style>
