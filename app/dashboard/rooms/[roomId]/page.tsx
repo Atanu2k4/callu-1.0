@@ -61,8 +61,8 @@ export default function RoomVoiceChatPage() {
   const audioContext = useRef<AudioContext | null>(null);
   const animationFrames = useRef<Map<string, number>>(new Map());
   const iceCandidateBuffers = useRef<Map<string, RTCIceCandidateInit[]>>(new Map()); // Buffer ICE candidates per peer
-  const joinSoundRef = useRef<HTMLAudioElement | null>(null);
-  const leaveSoundRef = useRef<HTMLAudioElement | null>(null);
+  const joinSoundBufferRef = useRef<AudioBuffer | null>(null);
+  const leaveSoundBufferRef = useRef<AudioBuffer | null>(null);
 
   const ICE_CONFIG: RTCConfiguration = {
     iceServers: [
@@ -91,31 +91,54 @@ export default function RoomVoiceChatPage() {
     iceTransportPolicy: "all",
   };
 
-  // Initialize join/leave sound effects
+  // Pre-load sound effects as AudioBuffers (bypasses autoplay restrictions)
   useEffect(() => {
-    joinSoundRef.current = new Audio("/music/join_sound.mp3");
-    joinSoundRef.current.volume = 0.5;
-    leaveSoundRef.current = new Audio("/music/Leave_Sound.mp3");
-    leaveSoundRef.current.volume = 0.5;
+    const ctx = audioContext.current || new AudioContext();
+    if (!audioContext.current) audioContext.current = ctx;
+
+    const loadSound = async (url: string): Promise<AudioBuffer | null> => {
+      try {
+        const response = await fetch(url);
+        const arrayBuffer = await response.arrayBuffer();
+        return await ctx.decodeAudioData(arrayBuffer);
+      } catch (err) {
+        console.error(`Failed to load sound: ${url}`, err);
+        return null;
+      }
+    };
+
+    loadSound("/music/join_sound.mp3").then(buf => { joinSoundBufferRef.current = buf; });
+    loadSound("/music/Leave_Sound.mp3").then(buf => { leaveSoundBufferRef.current = buf; });
+
     return () => {
-      joinSoundRef.current = null;
-      leaveSoundRef.current = null;
+      joinSoundBufferRef.current = null;
+      leaveSoundBufferRef.current = null;
     };
   }, []);
 
-  const playJoinSound = () => {
-    if (joinSoundRef.current) {
-      joinSoundRef.current.currentTime = 0;
-      joinSoundRef.current.play().catch(() => {});
+  const playSoundBuffer = (buffer: AudioBuffer | null) => {
+    if (!buffer || !audioContext.current) return;
+
+    // Ensure AudioContext is running (it may get suspended by browser policy)
+    if (audioContext.current.state === 'suspended') {
+      audioContext.current.resume();
+    }
+
+    try {
+      const source = audioContext.current.createBufferSource();
+      const gainNode = audioContext.current.createGain();
+      gainNode.gain.value = 0.5; // volume
+      source.buffer = buffer;
+      source.connect(gainNode);
+      gainNode.connect(audioContext.current.destination);
+      source.start(0);
+    } catch (err) {
+      console.error('Failed to play sound effect:', err);
     }
   };
 
-  const playLeaveSound = () => {
-    if (leaveSoundRef.current) {
-      leaveSoundRef.current.currentTime = 0;
-      leaveSoundRef.current.play().catch(() => {});
-    }
-  };
+  const playJoinSound = () => playSoundBuffer(joinSoundBufferRef.current);
+  const playLeaveSound = () => playSoundBuffer(leaveSoundBufferRef.current);
 
   useEffect(() => {
     if (!user || !roomId) {

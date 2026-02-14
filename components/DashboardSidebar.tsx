@@ -355,6 +355,24 @@ export function DashboardSidebar() {
                             </button>
                           </div>
 
+                          {/* Room List */}
+                          <AnimatePresence>
+                            {expandedRooms && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: "auto", opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="overflow-hidden ml-4 mt-1 space-y-1"
+                              >
+                                {rooms.length === 0 ? (
+                                  <div className="text-xs text-zinc-600 p-2">No rooms yet</div>
+                                ) : (
+                                  rooms.map((room) => (
+                                    <div
+                                      key={room._id}
+                                      className="flex items-center gap-2 group relative"
+                                    >
                                       <button
                                         onClick={() => handleJoinRoom(room._id)}
                                         className={cn(
