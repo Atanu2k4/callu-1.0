@@ -6,7 +6,7 @@ import YouTube, { YouTubeProps, YouTubeEvent } from "react-youtube";
 import {
   Music, Play, Pause, SkipForward, SkipBack, Square, Plus,
   Trash2, ListMusic, X, Info, Loader2, ChevronDown,
-  ChevronUp, Volume2, Maximize2,
+  ChevronUp, Volume2, Maximize2, Repeat1,
 } from "lucide-react";
 import { useSocket } from "@/context/SocketContext";
 import { useAuth } from "@/context/AuthContext";
@@ -30,39 +30,37 @@ interface RoomMusicPlayerProps {
 
 // ── Helpers ─────────────────────────────────────────────────────
 
-/** Extract YouTube video ID from various URL formats */
 function extractVideoId(input: string): string | null {
-  if (/^[a-zA-Z0-9_-]{11}$/.test(input.trim())) {
-    return input.trim();
-  }
+  if (/^[a-zA-Z0-9_-]{11}$/.test(input.trim())) return input.trim();
   const patterns = [
     /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
     /youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})/,
     /music\.youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/,
   ];
-  for (const pattern of patterns) {
-    const match = input.match(pattern);
-    if (match) return match[1];
+  for (const p of patterns) {
+    const m = input.match(p);
+    if (m) return m[1];
   }
   return null;
 }
 
-/** Format seconds to mm:ss */
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  RoomMusicPlayer Component
+// Circular progress ring constants
+const RING_RADIUS = 21;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
 // ═══════════════════════════════════════════════════════════════
 
 export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: RoomMusicPlayerProps) {
   const { socket } = useSocket();
   const { user } = useAuth();
 
-  // ─── Queue & playback state ──────────────────────────────────
+  // ─── State ───────────────────────────────────────────────────
   const [queue, setQueue] = useState<Song[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(-1);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -73,23 +71,26 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(80);
   const [isSeeking, setIsSeeking] = useState(false);
+  const [repeatOne, setRepeatOne] = useState(false);
 
   // ─── Refs ────────────────────────────────────────────────────
   const playerRef = useRef<any>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasRespondedToStateRef = useRef(false);
   const progressBarRef = useRef<HTMLDivElement>(null);
-  const miniProgressBarRef = useRef<HTMLDivElement>(null);
   const currentIndexRef = useRef(currentIndex);
   const queueRef = useRef(queue);
   const isPlayingRef = useRef(isPlaying);
+  const repeatOneRef = useRef(repeatOne);
+  const socketRef = useRef(socket);
 
-  // Keep refs in sync
   useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
   useEffect(() => { queueRef.current = queue; }, [queue]);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+  useEffect(() => { repeatOneRef.current = repeatOne; }, [repeatOne]);
+  useEffect(() => { socketRef.current = socket; }, [socket]);
 
-  // ─── YouTube player opts ─────────────────────────────────────
+  // ─── YouTube opts ────────────────────────────────────────────
   const playerOpts: YouTubeProps["opts"] = {
     height: "0",
     width: "0",
@@ -124,20 +125,14 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
     }
   }, []);
 
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => { stopTimeTracker(); };
-  }, [stopTimeTracker]);
+  useEffect(() => () => { stopTimeTracker(); }, [stopTimeTracker]);
 
-  // ─── Volume sync ────────────────────────────────────────────
   useEffect(() => {
-    if (playerRef.current) {
-      playerRef.current.setVolume?.(volume);
-    }
+    if (playerRef.current) playerRef.current.setVolume?.(volume);
   }, [volume]);
 
   // ═══════════════════════════════════════════════════════════════
-  //  Seek handler (works for both full-panel and mini-bar bars)
+  //  Seek handler – emits socket event for sync
   // ═══════════════════════════════════════════════════════════════
 
   const createSeekHandlers = useCallback((barRef: React.RefObject<HTMLDivElement | null>) => {
@@ -145,31 +140,28 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
       if (!barRef.current || !playerRef.current || duration <= 0) return;
       setIsSeeking(true);
 
-      // Initial seek on click
       const rect = barRef.current.getBoundingClientRect();
       const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-      const percent = x / rect.width;
-      const seekTime = percent * duration;
+      const seekTime = (x / rect.width) * duration;
       playerRef.current.seekTo?.(seekTime, true);
       setCurrentTime(seekTime);
 
       const onMouseMove = (ev: MouseEvent) => {
-        if (!barRef.current || !playerRef.current || duration <= 0) return;
+        if (!barRef.current || duration <= 0) return;
         const r = barRef.current.getBoundingClientRect();
         const mx = Math.max(0, Math.min(ev.clientX - r.left, r.width));
-        const mp = mx / r.width;
-        const st = mp * duration;
-        setCurrentTime(st);
+        setCurrentTime((mx / r.width) * duration);
       };
 
       const onMouseUp = (ev: MouseEvent) => {
         if (barRef.current && playerRef.current && duration > 0) {
           const r = barRef.current.getBoundingClientRect();
           const mx = Math.max(0, Math.min(ev.clientX - r.left, r.width));
-          const mp = mx / r.width;
-          const st = mp * duration;
+          const st = (mx / r.width) * duration;
           playerRef.current.seekTo?.(st, true);
           setCurrentTime(st);
+          // Broadcast seek to other participants
+          socketRef.current?.emit("music-seek", { roomId, time: st });
         }
         setIsSeeking(false);
         document.removeEventListener("mousemove", onMouseMove);
@@ -179,12 +171,11 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
       document.addEventListener("mousemove", onMouseMove);
       document.addEventListener("mouseup", onMouseUp);
     };
-
     return onMouseDown;
-  }, [duration]);
+  }, [duration, roomId]);
 
   // ═══════════════════════════════════════════════════════════════
-  //  Socket listeners for music sync
+  //  Socket listeners
   // ═══════════════════════════════════════════════════════════════
 
   useEffect(() => {
@@ -195,8 +186,7 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
     };
 
     const onPlay = (data: { index?: number }) => {
-      const idx = data.index ?? 0;
-      setCurrentIndex(idx);
+      setCurrentIndex(data.index ?? 0);
       setIsPlaying(true);
       setCurrentTime(0);
       setDuration(0);
@@ -204,26 +194,20 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
 
     const onPause = () => {
       setIsPlaying(false);
-      if (playerRef.current) {
-        playerRef.current.pauseVideo?.();
-      }
+      playerRef.current?.pauseVideo?.();
       stopTimeTracker();
     };
 
     const onResume = () => {
       setIsPlaying(true);
-      if (playerRef.current) {
-        playerRef.current.playVideo?.();
-      }
+      playerRef.current?.playVideo?.();
       startTimeTracker();
     };
 
     const onSkip = () => {
-      const curIdx = currentIndexRef.current;
-      const q = queueRef.current;
-      const nextIdx = curIdx + 1;
-      if (nextIdx < q.length) {
-        setCurrentIndex(nextIdx);
+      const next = currentIndexRef.current + 1;
+      if (next < queueRef.current.length) {
+        setCurrentIndex(next);
         setIsPlaying(true);
         setCurrentTime(0);
         setDuration(0);
@@ -237,9 +221,8 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
     };
 
     const onPrev = () => {
-      const curIdx = currentIndexRef.current;
-      if (curIdx > 0) {
-        setCurrentIndex(curIdx - 1);
+      if (currentIndexRef.current > 0) {
+        setCurrentIndex(currentIndexRef.current - 1);
         setIsPlaying(true);
         setCurrentTime(0);
         setDuration(0);
@@ -251,10 +234,19 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
       setCurrentIndex(-1);
       setCurrentTime(0);
       setDuration(0);
-      if (playerRef.current) {
-        playerRef.current.stopVideo?.();
-      }
+      playerRef.current?.stopVideo?.();
       stopTimeTracker();
+    };
+
+    const onSeek = (data: { time: number }) => {
+      if (playerRef.current && typeof data.time === "number") {
+        playerRef.current.seekTo?.(data.time, true);
+        setCurrentTime(data.time);
+      }
+    };
+
+    const onRepeat = (data: { repeat: boolean }) => {
+      setRepeatOne(data.repeat);
     };
 
     const onRemoveFromQueue = (data: { index: number }) => {
@@ -276,9 +268,7 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
       setIsPlaying(false);
       setCurrentTime(0);
       setDuration(0);
-      if (playerRef.current) {
-        playerRef.current.stopVideo?.();
-      }
+      playerRef.current?.stopVideo?.();
       stopTimeTracker();
     };
 
@@ -286,26 +276,28 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
       if (hasRespondedToStateRef.current) return;
       hasRespondedToStateRef.current = true;
       setTimeout(() => { hasRespondedToStateRef.current = false; }, 2000);
-
-      const state = {
-        queue: queueRef.current,
-        currentIndex: currentIndexRef.current,
-        isPlaying: isPlayingRef.current,
-        currentTime: playerRef.current?.getCurrentTime?.() ?? 0,
-      };
       socket.emit("music-state-response", {
         roomId,
         requesterId: data.requesterId,
-        state,
+        state: {
+          queue: queueRef.current,
+          currentIndex: currentIndexRef.current,
+          isPlaying: isPlayingRef.current,
+          currentTime: playerRef.current?.getCurrentTime?.() ?? 0,
+          repeatOne: repeatOneRef.current,
+        },
       });
     };
 
-    const onStateSync = (data: { state: { queue?: Song[]; currentIndex?: number; isPlaying?: boolean; currentTime?: number } }) => {
+    const onStateSync = (data: {
+      state: { queue?: Song[]; currentIndex?: number; isPlaying?: boolean; currentTime?: number; repeatOne?: boolean };
+    }) => {
       const { state } = data;
       if (state.queue && state.queue.length > 0) {
         setQueue(state.queue);
         if (state.currentIndex !== undefined) setCurrentIndex(state.currentIndex);
         if (state.isPlaying !== undefined) setIsPlaying(state.isPlaying);
+        if (state.repeatOne !== undefined) setRepeatOne(state.repeatOne);
       }
     };
 
@@ -316,6 +308,8 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
     socket.on("music-skip", onSkip);
     socket.on("music-prev", onPrev);
     socket.on("music-stop", onStop);
+    socket.on("music-seek", onSeek);
+    socket.on("music-repeat", onRepeat);
     socket.on("music-remove-from-queue", onRemoveFromQueue);
     socket.on("music-clear-queue", onClearQueue);
     socket.on("music-state-request", onStateRequest);
@@ -331,6 +325,8 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
       socket.off("music-skip", onSkip);
       socket.off("music-prev", onPrev);
       socket.off("music-stop", onStop);
+      socket.off("music-seek", onSeek);
+      socket.off("music-repeat", onRepeat);
       socket.off("music-remove-from-queue", onRemoveFromQueue);
       socket.off("music-clear-queue", onClearQueue);
       socket.off("music-state-request", onStateRequest);
@@ -340,26 +336,20 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
   }, [socket, roomId]);
 
   // ═══════════════════════════════════════════════════════════════
-  //  Actions (emit socket events)
+  //  Actions
   // ═══════════════════════════════════════════════════════════════
 
   const addToQueue = async () => {
     if (!linkInput.trim() || !socket || !user) return;
-
     const videoId = extractVideoId(linkInput.trim());
-    if (!videoId) {
-      toast.error("Invalid YouTube link. Please paste a valid YouTube URL.");
-      return;
-    }
-
+    if (!videoId) { toast.error("Invalid YouTube link."); return; }
     setIsAdding(true);
-
     try {
-      const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
-      const res = await fetch(oembedUrl);
-      if (!res.ok) throw new Error("Video not found");
+      const res = await fetch(
+        `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`
+      );
+      if (!res.ok) throw new Error();
       const data = await res.json();
-
       const song: Song = {
         videoId,
         title: data.title || "Unknown Title",
@@ -368,12 +358,11 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
         addedBy: user._id,
         addedByName: user.name,
       };
-
       socket.emit("music-add-to-queue", { roomId, song });
       setLinkInput("");
       toast.success(`Added "${song.title}" to queue`);
     } catch {
-      toast.error("Could not fetch video info. Please check the link.");
+      toast.error("Could not fetch video info.");
     } finally {
       setIsAdding(false);
     }
@@ -381,17 +370,10 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
 
   const handlePlay = () => {
     if (!socket) return;
-    if (queue.length === 0) {
-      toast.error("Queue is empty. Add a song first!");
-      return;
-    }
-    if (isPlaying) {
-      socket.emit("music-pause", { roomId });
-    } else if (currentIndex >= 0) {
-      socket.emit("music-resume", { roomId });
-    } else {
-      socket.emit("music-play", { roomId, index: 0 });
-    }
+    if (queue.length === 0) { toast.error("Queue is empty!"); return; }
+    if (isPlaying) socket.emit("music-pause", { roomId });
+    else if (currentIndex >= 0) socket.emit("music-resume", { roomId });
+    else socket.emit("music-play", { roomId, index: 0 });
   };
 
   const handleSkip = () => {
@@ -405,29 +387,27 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
   };
 
   const handleStop = () => {
-    if (!socket) return;
-    socket.emit("music-stop", { roomId });
+    socket?.emit("music-stop", { roomId });
+  };
+
+  const handleRepeat = () => {
+    socket?.emit("music-repeat", { roomId, repeat: !repeatOne });
   };
 
   const handleRemove = (index: number) => {
-    if (!socket) return;
-    socket.emit("music-remove-from-queue", { roomId, index });
+    socket?.emit("music-remove-from-queue", { roomId, index });
   };
 
   const handleClearQueue = () => {
-    if (!socket) return;
-    socket.emit("music-clear-queue", { roomId });
+    socket?.emit("music-clear-queue", { roomId });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      addToQueue();
-    }
+    if (e.key === "Enter") { e.preventDefault(); addToQueue(); }
   };
 
   // ═══════════════════════════════════════════════════════════════
-  //  YouTube Player Event Handlers
+  //  YouTube Player Handlers
   // ═══════════════════════════════════════════════════════════════
 
   const onPlayerReady = (event: YouTubeEvent) => {
@@ -441,22 +421,26 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
     }
   };
 
-  const onPlayerPlay = () => {
-    startTimeTracker();
-  };
-
-  const onPlayerPause = () => {
-    stopTimeTracker();
-  };
+  const onPlayerPlay = () => startTimeTracker();
+  const onPlayerPause = () => stopTimeTracker();
 
   const onPlayerEnd = () => {
     stopTimeTracker();
+    // Repeat-one: replay same song
+    if (repeatOneRef.current) {
+      if (playerRef.current) {
+        playerRef.current.seekTo?.(0, true);
+        playerRef.current.playVideo?.();
+        setCurrentTime(0);
+        startTimeTracker();
+      }
+      return;
+    }
+    // Otherwise advance
     const curIdx = currentIndexRef.current;
     const q = queueRef.current;
     if (curIdx + 1 < q.length) {
-      if (socket) {
-        socket.emit("music-skip", { roomId });
-      }
+      socket?.emit("music-skip", { roomId });
     } else {
       setIsPlaying(false);
       setCurrentIndex(-1);
@@ -466,25 +450,23 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
   };
 
   const onPlayerError = () => {
-    toast.error("Failed to play this video. Skipping...");
+    toast.error("Failed to play video. Skipping...");
     const curIdx = currentIndexRef.current;
-    const q = queueRef.current;
-    if (curIdx + 1 < q.length) {
-      if (socket) {
-        socket.emit("music-skip", { roomId });
-      }
+    if (curIdx + 1 < queueRef.current.length) {
+      socket?.emit("music-skip", { roomId });
     } else {
       setIsPlaying(false);
     }
   };
 
-  // ─── Derived state ──────────────────────────────────────────
+  // ─── Derived ─────────────────────────────────────────────────
   const currentSong = currentIndex >= 0 && currentIndex < queue.length ? queue[currentIndex] : null;
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const hasMusic = currentSong !== null;
+  const ringOffset = RING_CIRCUMFERENCE - (progressPercent / 100) * RING_CIRCUMFERENCE;
 
   // ═══════════════════════════════════════════════════════════════
-  //  Seekable Progress Bar renderer
+  //  Seekable linear progress bar (full panel)
   // ═══════════════════════════════════════════════════════════════
 
   const renderProgressBar = (barRef: React.RefObject<HTMLDivElement | null>, height: string = "h-1.5") => (
@@ -498,7 +480,6 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
           className="h-full bg-emerald-500 rounded-full transition-[width] duration-200 ease-linear"
           style={{ width: `${progressPercent}%` }}
         />
-        {/* Seek knob */}
         <div
           className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-emerald-400 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
           style={{ left: `calc(${progressPercent}% - 6px)` }}
@@ -517,7 +498,7 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
 
   return (
     <>
-      {/* ─── Hidden YouTube Player (ALWAYS mounted when a current song exists) ─── */}
+      {/* Hidden YouTube Player – ALWAYS mounted when a song is loaded */}
       <div className="fixed w-0 h-0 overflow-hidden pointer-events-none" style={{ top: -9999, left: -9999 }} aria-hidden="true">
         {currentSong && (
           <YouTube
@@ -533,21 +514,38 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
         )}
       </div>
 
-      {/* ─── Mini Player Bar (shown when panel is closed AND music is active) ─── */}
+      {/* ─── Mini Player – Bottom-Right with Circular Progress Ring ─── */}
       <AnimatePresence>
         {!isOpen && hasMusic && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, scale: 0.8, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: 20 }}
             transition={{ type: "spring", stiffness: 400, damping: 30 }}
-            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-lg"
+            className="fixed bottom-6 right-6 z-50"
           >
-            <div className="bg-zinc-900/95 backdrop-blur-xl border border-zinc-800/50 rounded-2xl p-3 shadow-2xl ring-1 ring-white/5">
-              {/* Song info row */}
-              <div className="flex items-center gap-3">
-                {/* Thumbnail */}
-                <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-zinc-800">
+            <div className="bg-zinc-900/95 backdrop-blur-xl border border-zinc-800/50 rounded-2xl px-3 py-2.5 shadow-2xl ring-1 ring-white/5 flex items-center gap-3 max-w-xs">
+              {/* Circular thumbnail with ring progress */}
+              <div
+                className="relative w-12 h-12 flex-shrink-0 cursor-pointer"
+                onClick={onOpen}
+                title="Expand player"
+              >
+                <svg className="w-12 h-12 -rotate-90 absolute inset-0" viewBox="0 0 48 48">
+                  <circle
+                    cx="24" cy="24" r={RING_RADIUS}
+                    fill="none" stroke="#27272a" strokeWidth="2.5"
+                  />
+                  <circle
+                    cx="24" cy="24" r={RING_RADIUS}
+                    fill="none" stroke="#10b981" strokeWidth="2.5"
+                    strokeDasharray={RING_CIRCUMFERENCE}
+                    strokeDashoffset={ringOffset}
+                    strokeLinecap="round"
+                    className="transition-all duration-300 ease-linear"
+                  />
+                </svg>
+                <div className="absolute inset-[4px] rounded-full overflow-hidden bg-zinc-800">
                   <img
                     src={currentSong!.thumbnail}
                     alt={currentSong!.title}
@@ -567,55 +565,47 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
                     </div>
                   )}
                 </div>
-
-                {/* Title */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-white text-xs font-medium truncate">{currentSong!.title}</p>
-                  <p className="text-zinc-500 text-[10px] truncate">{currentSong!.addedByName}</p>
-                </div>
-
-                {/* Controls */}
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={handlePrev}
-                    disabled={currentIndex <= 0}
-                    className="p-1.5 rounded-lg text-zinc-400 hover:text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                  >
-                    <SkipBack className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={handlePlay}
-                    className="p-2 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black transition-all cursor-pointer"
-                  >
-                    {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-px" />}
-                  </button>
-                  <button
-                    onClick={handleSkip}
-                    disabled={currentIndex + 1 >= queue.length}
-                    className="p-1.5 rounded-lg text-zinc-400 hover:text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                  >
-                    <SkipForward className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={onOpen}
-                    className="p-1.5 rounded-lg text-zinc-400 hover:text-white transition-all cursor-pointer ml-1"
-                    title="Expand player"
-                  >
-                    <Maximize2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
               </div>
 
-              {/* Mini progress bar */}
-              <div className="mt-2">
-                {renderProgressBar(miniProgressBarRef, "h-1")}
+              {/* Song title */}
+              <div className="min-w-0 flex-1">
+                <p className="text-white text-[11px] font-medium truncate max-w-[120px]">
+                  {currentSong!.title}
+                </p>
+                <p className="text-zinc-500 text-[9px] font-mono">
+                  {formatTime(currentTime)} / {duration > 0 ? formatTime(duration) : "--:--"}
+                </p>
+              </div>
+
+              {/* Mini controls */}
+              <div className="flex items-center gap-0.5">
+                <button
+                  onClick={handlePrev}
+                  disabled={currentIndex <= 0}
+                  className="p-1.5 rounded-lg text-zinc-400 hover:text-white transition-all disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  <SkipBack className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={handlePlay}
+                  className="p-1.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black transition-all cursor-pointer"
+                >
+                  {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-px" />}
+                </button>
+                <button
+                  onClick={handleSkip}
+                  disabled={currentIndex + 1 >= queue.length}
+                  className="p-1.5 rounded-lg text-zinc-400 hover:text-white transition-all disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  <SkipForward className="w-3 h-3" />
+                </button>
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ─── Full Panel (slide-in from right) ─── */}
+      {/* ─── Full Panel ─── */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -625,7 +615,7 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
             className="fixed top-0 right-0 h-full w-full max-w-md bg-zinc-950/95 backdrop-blur-xl border-l border-zinc-800/50 z-50 flex flex-col shadow-2xl"
           >
-            {/* ─── Header ─── */}
+            {/* Header */}
             <div className="flex items-center justify-between p-5 border-b border-zinc-800/50">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
@@ -647,7 +637,7 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
               </button>
             </div>
 
-            {/* ─── Now Playing ─── */}
+            {/* Now Playing */}
             {currentSong && (
               <div className="p-5 border-b border-zinc-800/50">
                 <div className="flex items-center gap-3 mb-3">
@@ -677,11 +667,24 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
                   </div>
                 </div>
 
-                {/* ─── Seekable Progress Bar ─── */}
+                {/* Seekable Progress Bar */}
                 {renderProgressBar(progressBarRef, "h-1.5")}
 
-                {/* ─── Playback Controls ─── */}
-                <div className="flex items-center justify-center gap-3 mt-3">
+                {/* Playback Controls */}
+                <div className="flex items-center justify-center gap-2 mt-3">
+                  {/* Repeat One */}
+                  <button
+                    onClick={handleRepeat}
+                    className={`p-2.5 rounded-full transition-all cursor-pointer ${
+                      repeatOne
+                        ? "bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/40"
+                        : "bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white"
+                    }`}
+                    title={repeatOne ? "Repeat is ON" : "Repeat One"}
+                  >
+                    <Repeat1 className="w-4 h-4" />
+                  </button>
+
                   <button
                     onClick={handlePrev}
                     disabled={currentIndex <= 0}
@@ -710,7 +713,7 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
                   </button>
 
                   {/* Volume */}
-                  <div className="flex items-center gap-2 ml-3 pl-3 border-l border-zinc-800">
+                  <div className="flex items-center gap-2 ml-2 pl-2 border-l border-zinc-800">
                     <Volume2 className="w-3.5 h-3.5 text-zinc-500" />
                     <input
                       type="range"
@@ -718,20 +721,18 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
                       max={100}
                       value={volume}
                       onChange={(e) => setVolume(Number(e.target.value))}
-                      className="w-20 h-1 accent-emerald-500 cursor-pointer"
+                      className="w-16 h-1 accent-emerald-500 cursor-pointer"
                     />
                   </div>
                 </div>
               </div>
             )}
 
-            {/* ─── Add Song Input ─── */}
+            {/* Add Song */}
             <div className="p-5 border-b border-zinc-800/50">
               <div className="flex items-center gap-2 mb-2">
                 <Info className="w-3.5 h-3.5 text-zinc-500" />
-                <p className="text-[11px] text-zinc-500">
-                  Paste a YouTube video URL to add it to the queue
-                </p>
+                <p className="text-[11px] text-zinc-500">Paste a YouTube URL to add to queue</p>
               </div>
               <div className="flex gap-2">
                 <input
@@ -747,15 +748,9 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
                   disabled={isAdding || !linkInput.trim()}
                   className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-all font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
                 >
-                  {isAdding ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Plus className="w-4 h-4" />
-                  )}
+                  {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                 </button>
               </div>
-
-              {/* Quick play if queue has songs but nothing playing */}
               {queue.length > 0 && currentIndex < 0 && (
                 <button
                   onClick={() => socket?.emit("music-play", { roomId, index: 0 })}
@@ -767,7 +762,7 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
               )}
             </div>
 
-            {/* ─── Queue ─── */}
+            {/* Queue */}
             <div className="flex-1 overflow-hidden flex flex-col">
               <button
                 onClick={() => setShowQueue(!showQueue)}
@@ -780,10 +775,7 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
                 <div className="flex items-center gap-2">
                   {queue.length > 0 && (
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleClearQueue();
-                      }}
+                      onClick={(e) => { e.stopPropagation(); handleClearQueue(); }}
                       className="text-xs text-red-400 hover:text-red-300 transition-colors px-2 py-1 rounded-lg hover:bg-red-500/10 cursor-pointer"
                     >
                       Clear All
@@ -821,7 +813,6 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
                                 : "bg-zinc-900/40 border border-transparent hover:bg-zinc-800/60 hover:border-zinc-700/50"
                             }`}
                           >
-                            {/* Thumbnail */}
                             <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-zinc-800">
                               <img
                                 src={song.thumbnail}
@@ -842,26 +833,16 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
                                 </div>
                               )}
                             </div>
-
-                            {/* Info */}
                             <div className="flex-1 min-w-0">
                               <p className={`text-xs font-medium truncate ${
                                 index === currentIndex ? "text-emerald-300" : "text-white"
-                              }`}>
-                                {song.title}
-                              </p>
-                              <p className="text-[10px] text-zinc-500 mt-0.5">
-                                {song.addedByName}
-                              </p>
+                              }`}>{song.title}</p>
+                              <p className="text-[10px] text-zinc-500 mt-0.5">{song.addedByName}</p>
                             </div>
-
-                            {/* Queue position / actions */}
                             <div className="flex items-center gap-1">
                               {index !== currentIndex && (
                                 <button
-                                  onClick={() => {
-                                    if (socket) socket.emit("music-play", { roomId, index });
-                                  }}
+                                  onClick={() => socket?.emit("music-play", { roomId, index })}
                                   className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 bg-zinc-800 hover:bg-emerald-500/20 text-zinc-400 hover:text-emerald-400 transition-all cursor-pointer"
                                   title="Play this song"
                                 >
@@ -871,7 +852,7 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
                               <button
                                 onClick={() => handleRemove(index)}
                                 className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 bg-zinc-800 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 transition-all cursor-pointer"
-                                title="Remove from queue"
+                                title="Remove"
                               >
                                 <Trash2 className="w-3 h-3" />
                               </button>

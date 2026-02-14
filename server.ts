@@ -230,6 +230,14 @@ connectDB().then(() => {
       io.in(data.roomId).emit("music-prev", {});
     });
 
+    socket.on("music-seek", (data: { roomId: string; time: number }) => {
+      socket.to(data.roomId).emit("music-seek", { time: data.time });
+    });
+
+    socket.on("music-repeat", (data: { roomId: string; repeat: boolean }) => {
+      io.in(data.roomId).emit("music-repeat", { repeat: data.repeat });
+    });
+
     socket.on("music-stop", (data: { roomId: string }) => {
       io.in(data.roomId).emit("music-stop", {});
     });
