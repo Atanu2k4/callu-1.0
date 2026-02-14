@@ -49,7 +49,7 @@ connectDB().then(() => {
   // Store connected users (socketId -> userId)
   // In a real app, use Redis. For this MVP, in-memory is fine.
   const onlineUsers = new Map<string, string>(); // userId -> socketId
-  const roomParticipants = new Map<string, Map<string, { name: string; avatar: string | null; color: string }>>(); // roomId -> Map of userId -> profile
+  const roomParticipants = new Map<string, Map<string, { name: string; avatar: string | null; color: string; isVideoOn: boolean; isScreenSharing: boolean }>>(); // roomId -> Map of userId -> profile
   const userSockets = new Map<string, string>(); // userId -> socketId for rooms
 
   const emitRoomCount = (roomId: string) => {
@@ -114,7 +114,7 @@ connectDB().then(() => {
       if (!roomParticipants.has(roomId)) {
         roomParticipants.set(roomId, new Map());
       }
-      roomParticipants.get(roomId)!.set(userId, { name: userName, avatar, color });
+      roomParticipants.get(roomId)!.set(userId, { name: userName, avatar, color, isVideoOn: false, isScreenSharing: false });
       
       // Notify others in the room
       socket.to(roomId).emit("room-user-joined", { userId, userName, avatar, color });
@@ -126,6 +126,8 @@ connectDB().then(() => {
         avatar: profile.avatar,
         color: profile.color,
         isSpeaking: false,
+        isVideoOn: profile.isVideoOn,
+        isScreenSharing: profile.isScreenSharing,
       }));
       socket.emit("room-participants", { participants });
       emitRoomCount(roomId);
@@ -165,6 +167,26 @@ connectDB().then(() => {
       const { roomId, userId, isSpeaking } = data;
       // Broadcast speaking status to all other users in the room
       socket.to(roomId).emit("user-speaking", { userId, isSpeaking });
+    });
+
+    socket.on("room-video-toggle", (data: { roomId: string; userId: string; isVideoOn: boolean }) => {
+      const { roomId, userId, isVideoOn } = data;
+      const participants = roomParticipants.get(roomId);
+      if (participants && participants.has(userId)) {
+        const profile = participants.get(userId)!;
+        profile.isVideoOn = isVideoOn;
+      }
+      socket.to(roomId).emit("room-video-toggle", { userId, isVideoOn });
+    });
+
+    socket.on("room-screen-share", (data: { roomId: string; userId: string; isSharing: boolean }) => {
+      const { roomId, userId, isSharing } = data;
+      const participants = roomParticipants.get(roomId);
+      if (participants && participants.has(userId)) {
+        const profile = participants.get(userId)!;
+        profile.isScreenSharing = isSharing;
+      }
+      socket.to(roomId).emit("room-screen-share", { userId, isSharing });
     });
 
     socket.on("rooms-counts-request", () => {
