@@ -982,7 +982,7 @@ export default function CallManager() {
   if (isMinimized && callAccepted) {
     const displayName = incomingCall?.name || outgoingCallData?.userName || "Call";
     return (
-      <div className="fixed bottom-6 right-6 z-50 rounded-2xl overflow-hidden shadow-2xl w-48 h-32 bg-black border border-zinc-700" onClick={enableAudio}>
+      <div className="fixed bottom-6 right-6 z-50 rounded-2xl overflow-hidden shadow-2xl w-48 h-32 bg-black border border-zinc-700 cursor-pointer" onClick={enableAudio}>
         {/* Remote video in background */}
         {remoteVideoAvailable && (
           <video
@@ -1011,7 +1011,7 @@ export default function CallManager() {
                 e.stopPropagation();
                 setIsMinimized(false);
               }}
-              className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200"
+              className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 cursor-pointer"
               aria-label="Restore call"
             >
               <Maximize2 size={14} />
@@ -1021,7 +1021,7 @@ export default function CallManager() {
                 e.stopPropagation();
                 toggleCamera();
               }}
-              className={`p-1.5 rounded-lg ${!isVideoOn ? "bg-red-600/80" : "bg-zinc-800/80"} text-white`}
+              className={`p-1.5 rounded-lg ${!isVideoOn ? "bg-red-600/80" : "bg-zinc-800/80"} text-white cursor-pointer`}
               aria-label="Toggle camera"
             >
               {isVideoOn ? <Video size={14} /> : <VideoOff size={14} />}
@@ -1031,7 +1031,7 @@ export default function CallManager() {
                 e.stopPropagation();
                 toggleMic();
               }}
-              className={`p-1.5 rounded-lg ${!isMicOn ? "bg-red-600/80" : "bg-zinc-800/80"} text-white`}
+              className={`p-1.5 rounded-lg ${!isMicOn ? "bg-red-600/80" : "bg-zinc-800/80"} text-white cursor-pointer`}
               aria-label="Toggle mic"
             >
               {isMicOn ? <Mic size={14} /> : <MicOff size={14} />}
@@ -1041,7 +1041,7 @@ export default function CallManager() {
                 e.stopPropagation();
                 endCall();
               }}
-              className="p-1.5 rounded-lg bg-red-600/80 text-white"
+              className="p-1.5 rounded-lg bg-red-600/80 text-white cursor-pointer"
               aria-label="End call"
             >
               <PhoneOff size={14} />
@@ -1065,7 +1065,7 @@ export default function CallManager() {
                 e.stopPropagation();
                 setIsMinimized(true);
               }}
-              className="absolute top-4 right-4 p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
+              className="absolute top-4 right-4 p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 cursor-pointer"
               aria-label="Minimize call"
             >
               <Minimize2 size={16} />
@@ -1125,7 +1125,7 @@ export default function CallManager() {
                       setShowMicMenu((prev) => !prev);
                       setShowSpeakerMenu(false);
                     }}
-                    className="p-2 rounded-full bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+                    className="p-2 rounded-full bg-zinc-800 text-zinc-300 hover:bg-zinc-700 cursor-pointer"
                     aria-label="Select microphone"
                   >
                     <ChevronDown size={16} />
@@ -1146,7 +1146,7 @@ export default function CallManager() {
                             void switchMicDevice(device.deviceId);
                             setShowMicMenu(false);
                           }}
-                          className={`w-full text-left px-2 py-1 rounded-lg text-xs hover:bg-zinc-800 ${
+                          className={`w-full text-left px-2 py-1 rounded-lg text-xs hover:bg-zinc-800 cursor-pointer ${
                             selectedMicId === device.deviceId ? "text-emerald-400" : "text-zinc-200"
                           }`}
                         >
@@ -1180,7 +1180,7 @@ export default function CallManager() {
                       setShowSpeakerMenu((prev) => !prev);
                       setShowMicMenu(false);
                     }}
-                    className="p-2 rounded-full bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+                    className="p-2 rounded-full bg-zinc-800 text-zinc-300 hover:bg-zinc-700 cursor-pointer"
                     aria-label="Select speaker"
                   >
                     <ChevronDown size={16} />
@@ -1201,7 +1201,7 @@ export default function CallManager() {
                             setSelectedSpeakerId(device.deviceId);
                             setShowSpeakerMenu(false);
                           }}
-                          className={`w-full text-left px-2 py-1 rounded-lg text-xs hover:bg-zinc-800 ${
+                          className={`w-full text-left px-2 py-1 rounded-lg text-xs hover:bg-zinc-800 cursor-pointer ${
                             selectedSpeakerId === device.deviceId ? "text-emerald-400" : "text-zinc-200"
                           }`}
                         >
@@ -1270,7 +1270,7 @@ export default function CallManager() {
                 e.stopPropagation();
                 setIsMinimized(true);
               }}
-              className="absolute top-4 left-4 p-2 rounded-lg bg-black/50 backdrop-blur-sm hover:bg-black/70 text-zinc-200 z-20"
+              className="absolute top-4 left-4 p-2 rounded-lg bg-black/50 backdrop-blur-sm hover:bg-black/70 text-zinc-200 z-20 cursor-pointer"
               aria-label="Minimize call"
             >
               <Minimize2 size={16} />
@@ -1346,7 +1346,7 @@ export default function CallManager() {
                         setShowMicMenu((prev) => !prev);
                         setShowSpeakerMenu(false);
                       }}
-                      className="p-2 rounded-full bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700"
+                      className="p-2 rounded-full bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700 cursor-pointer"
                       aria-label="Select microphone"
                     >
                       <ChevronDown size={14} />
@@ -1366,7 +1366,7 @@ export default function CallManager() {
                               void switchMicDevice(device.deviceId);
                               setShowMicMenu(false);
                             }}
-                            className={`w-full text-left px-2 py-1 rounded-lg text-xs hover:bg-zinc-800 ${
+                            className={`w-full text-left px-2 py-1 rounded-lg text-xs hover:bg-zinc-800 cursor-pointer ${
                               selectedMicId === device.deviceId ? "text-emerald-400" : "text-zinc-200"
                             }`}
                           >
@@ -1400,7 +1400,7 @@ export default function CallManager() {
                         setShowSpeakerMenu((prev) => !prev);
                         setShowMicMenu(false);
                       }}
-                      className="p-2 rounded-full bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700"
+                      className="p-2 rounded-full bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700 cursor-pointer"
                       aria-label="Select speaker"
                     >
                       <ChevronDown size={14} />
@@ -1420,7 +1420,7 @@ export default function CallManager() {
                               setSelectedSpeakerId(device.deviceId);
                               setShowSpeakerMenu(false);
                             }}
-                            className={`w-full text-left px-2 py-1 rounded-lg text-xs hover:bg-zinc-800 ${
+                            className={`w-full text-left px-2 py-1 rounded-lg text-xs hover:bg-zinc-800 cursor-pointer ${
                               selectedSpeakerId === device.deviceId ? "text-emerald-400" : "text-zinc-200"
                             }`}
                           >

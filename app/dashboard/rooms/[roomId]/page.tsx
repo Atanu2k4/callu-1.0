@@ -802,7 +802,7 @@ export default function RoomVoiceChatPage() {
           <div className="flex items-center gap-4">
             <button
               onClick={toggleMute}
-              className={`p-4 rounded-xl transition-all ${
+              className={`p-4 rounded-xl transition-all cursor-pointer ${
                 isMuted
                   ? "bg-red-600 hover:bg-red-700 text-white"
                   : "bg-zinc-800 hover:bg-zinc-700 text-white"
@@ -813,7 +813,7 @@ export default function RoomVoiceChatPage() {
 
             <button
               onClick={toggleDeafen}
-              className={`p-4 rounded-xl transition-all ${
+              className={`p-4 rounded-xl transition-all cursor-pointer ${
                 isDeafened
                   ? "bg-red-600 hover:bg-red-700 text-white"
                   : "bg-zinc-800 hover:bg-zinc-700 text-white"
@@ -826,7 +826,7 @@ export default function RoomVoiceChatPage() {
 
             <button
               onClick={leaveRoom}
-              className="p-4 rounded-xl bg-red-600 hover:bg-red-700 text-white transition-all"
+              className="p-4 rounded-xl bg-red-600 hover:bg-red-700 text-white transition-all cursor-pointer"
             >
               <PhoneOff className="w-6 h-6" />
             </button>

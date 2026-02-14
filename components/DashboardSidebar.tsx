@@ -201,7 +201,7 @@ export function DashboardSidebar() {
       <button
         onClick={toggleSidebar}
         className={cn(
-          "absolute p-1.5 text-zinc-400 hover:text-white transition-all z-50 focus:outline-none",
+          "absolute p-1.5 text-zinc-400 hover:text-white transition-all z-50 focus:outline-none cursor-pointer",
           isCollapsed 
             ? "top-20 left-1/2 -translate-x-1/2 bg-transparent hover:bg-zinc-800 rounded-md" 
             : "top-8 right-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg shadow-sm"
@@ -236,7 +236,7 @@ export function DashboardSidebar() {
                 <button
                   onClick={() => !isCollapsed && toggleExpand(item.label)}
                   className={cn(
-                    "flex items-center gap-3 p-3 rounded-xl transition-all group w-full",
+                    "flex items-center gap-3 p-3 rounded-xl transition-all group w-full cursor-pointer",
                     "hover:bg-zinc-900/50 text-zinc-400 hover:text-white",
                     isCollapsed ? "justify-center" : "justify-between"
                   )}
@@ -308,7 +308,7 @@ export function DashboardSidebar() {
                           <div className="flex items-center justify-between p-2.5 rounded-lg hover:bg-zinc-900/50 text-zinc-500 hover:text-white transition-all">
                             <button
                               onClick={() => setExpandedRooms(!expandedRooms)}
-                              className="flex items-center gap-3 text-sm flex-1"
+                              className="flex items-center gap-3 text-sm flex-1 cursor-pointer"
                             >
                               <Radio className="w-4 h-4 flex-shrink-0" />
                               <span className="whitespace-nowrap font-medium">Rooms</span>
@@ -321,7 +321,7 @@ export function DashboardSidebar() {
                             </button>
                             <button
                               onClick={() => setShowCreateRoomModal(true)}
-                              className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white transition-all"
+                              className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white transition-all cursor-pointer"
                             >
                               <Plus className="w-3 h-3" />
                             </button>
@@ -348,7 +348,7 @@ export function DashboardSidebar() {
                                       <button
                                         onClick={() => handleJoinRoom(room._id)}
                                         className={cn(
-                                          "flex items-center gap-2 p-2 rounded-lg transition-all text-xs flex-1 text-left",
+                                          "flex items-center gap-2 p-2 rounded-lg transition-all text-xs flex-1 text-left cursor-pointer",
                                           "hover:bg-zinc-900/50 text-zinc-500 hover:text-white",
                                           isRoomActive(room._id) && "bg-zinc-900/50 text-white"
                                         )}
@@ -363,7 +363,7 @@ export function DashboardSidebar() {
                                       </button>
                                       <button
                                         onClick={(e) => handleDeleteRoom(room._id, e)}
-                                        className="p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity text-zinc-500 hover:text-red-500 hover:bg-red-500/10"
+                                        className="p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity text-zinc-500 hover:text-red-500 hover:bg-red-500/10 cursor-pointer"
                                         title="Delete room"
                                       >
                                         <X className="w-3 h-3" />
@@ -482,14 +482,14 @@ export function DashboardSidebar() {
                 <button
                   type="button"
                   onClick={() => setShowCreateRoomModal(false)}
-                  className="flex-1 px-4 py-2 bg-zinc-800 text-white rounded-lg hover:bg-zinc-700 transition-colors"
+                  className="flex-1 px-4 py-2 bg-zinc-800 text-white rounded-lg hover:bg-zinc-700 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={creating}
-                  className="flex-1 px-4 py-2 bg-gradient-to-r from-zinc-800 to-zinc-950 text-white rounded-lg hover:from-zinc-700 hover:to-zinc-900 transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-zinc-800 to-zinc-950 text-white rounded-lg hover:from-zinc-700 hover:to-zinc-900 transition-colors disabled:opacity-50 cursor-pointer"
                 >
                   {creating ? "Creating..." : "Create Room"}
                 </button>

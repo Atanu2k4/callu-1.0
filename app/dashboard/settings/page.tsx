@@ -77,7 +77,7 @@ export default function SettingsPage() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-5 py-3 rounded-xl font-medium transition-all whitespace-nowrap ${
+            className={`flex items-center gap-2 px-5 py-3 rounded-xl font-medium transition-all whitespace-nowrap cursor-pointer ${
               activeTab === tab.id
                 ? "bg-white text-black"
                 : "bg-zinc-900/40 text-zinc-400 hover:text-white hover:bg-zinc-800/60 border border-zinc-800"
@@ -165,7 +165,7 @@ export default function SettingsPage() {
             <button
               onClick={handleSaveProfile}
               disabled={loading}
-              className="w-full mt-4 px-6 py-3 bg-white text-black font-medium rounded-xl hover:bg-zinc-200 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full mt-4 px-6 py-3 bg-white text-black font-medium rounded-xl hover:bg-zinc-200 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
             >
               <Save className="w-5 h-5" />
               {loading ? "Saving..." : "Save Changes"}
@@ -188,7 +188,7 @@ export default function SettingsPage() {
                 </div>
                 <button
                   onClick={() => setEmailNotifications(!emailNotifications)}
-                  className={`relative w-14 h-7 rounded-full transition-colors ${
+                  className={`relative w-14 h-7 rounded-full transition-colors cursor-pointer ${
                     emailNotifications ? "bg-emerald-500" : "bg-zinc-700"
                   }`}
                 >
@@ -205,7 +205,7 @@ export default function SettingsPage() {
                 </div>
                 <button
                   onClick={() => setCallNotifications(!callNotifications)}
-                  className={`relative w-14 h-7 rounded-full transition-colors ${
+                  className={`relative w-14 h-7 rounded-full transition-colors cursor-pointer ${
                     callNotifications ? "bg-emerald-500" : "bg-zinc-700"
                   }`}
                 >
@@ -222,7 +222,7 @@ export default function SettingsPage() {
                 </div>
                 <button
                   onClick={() => setSoundEnabled(!soundEnabled)}
-                  className={`relative w-14 h-7 rounded-full transition-colors ${
+                  className={`relative w-14 h-7 rounded-full transition-colors cursor-pointer ${
                     soundEnabled ? "bg-emerald-500" : "bg-zinc-700"
                   }`}
                 >
@@ -254,7 +254,7 @@ export default function SettingsPage() {
                     <button
                       key={option.value}
                       onClick={() => setProfileVisibility(option.value as any)}
-                      className={`w-full text-left p-4 rounded-xl border transition-all ${
+                      className={`w-full text-left p-4 rounded-xl border transition-all cursor-pointer ${
                         profileVisibility === option.value
                           ? "bg-zinc-800 border-zinc-700"
                           : "bg-zinc-900/60 border-zinc-800 hover:border-zinc-700"
@@ -274,7 +274,7 @@ export default function SettingsPage() {
                 </div>
                 <button
                   onClick={() => setShowOnlineStatus(!showOnlineStatus)}
-                  className={`relative w-14 h-7 rounded-full transition-colors ${
+                  className={`relative w-14 h-7 rounded-full transition-colors cursor-pointer ${
                     showOnlineStatus ? "bg-emerald-500" : "bg-zinc-700"
                   }`}
                 >
@@ -310,7 +310,7 @@ export default function SettingsPage() {
                 </div>
               </button>
 
-              <button className="w-full flex items-center justify-between p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl hover:border-red-600/50 hover:bg-red-600/5 transition-all group">
+              <button className="w-full flex items-center justify-between p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl hover:border-red-600/50 hover:bg-red-600/5 transition-all group cursor-pointer">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-red-500/10 rounded-lg flex items-center justify-center group-hover:bg-red-500/20 transition-colors">
                     <Trash2 className="w-5 h-5 text-red-500" />
