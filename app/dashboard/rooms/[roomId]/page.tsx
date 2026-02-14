@@ -1131,6 +1131,7 @@ export default function RoomVoiceChatPage() {
         roomId={roomId}
         isOpen={isMusicOpen}
         onClose={() => setIsMusicOpen(false)}
+        onOpen={() => setIsMusicOpen(true)}
       />
 
       <style jsx global>{`

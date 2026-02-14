@@ -226,6 +226,10 @@ connectDB().then(() => {
       io.in(data.roomId).emit("music-skip", {});
     });
 
+    socket.on("music-prev", (data: { roomId: string }) => {
+      io.in(data.roomId).emit("music-prev", {});
+    });
+
     socket.on("music-stop", (data: { roomId: string }) => {
       io.in(data.roomId).emit("music-stop", {});
     });
