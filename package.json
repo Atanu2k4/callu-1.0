@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@lottiefiles/dotlottie-react": "^0.17.15",
+    "@types/youtube-player": "^5.5.11",
     "clsx": "^2.1.1",
     "cross-env": "^10.1.0",
     "dotenv": "^17.2.4",
@@ -23,6 +24,7 @@
     "nodemailer": "^8.0.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-youtube": "^10.1.0",
     "resend": "^6.9.2",
     "simple-peer": "^9.11.1",
     "socket.io": "^4.8.3",

@@ -8,10 +8,12 @@ import {
   Volume2, VolumeX, PhoneOff, Mic, MicOff,
   Video, VideoOff, MonitorUp, MonitorOff,
   PictureInPicture2, LayoutGrid, Maximize2,
+  Wrench, Music,
 } from "lucide-react";
 import { useSocket } from "@/context/SocketContext";
 import { useRoomVoice } from "@/context/RoomVoiceContext";
 import { toast } from "sonner";
+import RoomMusicPlayer from "@/components/RoomMusicPlayer";
 
 interface Room {
   _id: string;
@@ -63,6 +65,8 @@ export default function RoomVoiceChatPage() {
   const [isInPiP, setIsInPiP] = useState(false);
   const [layout, setLayout] = useState<"grid" | "spotlight">("grid");
   const [spotlightUserId, setSpotlightUserId] = useState<string | null>(null);
+  const [isMusicOpen, setIsMusicOpen] = useState(false);
+  const [showToolsMenu, setShowToolsMenu] = useState(false);
 
   // ─── Local refs (video-only, page-scoped) ───────────────────────
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -1047,6 +1051,52 @@ export default function RoomVoiceChatPage() {
               </span>
             </button>
 
+            {/* Tools */}
+            <div className="relative">
+              <button
+                onClick={() => setShowToolsMenu(!showToolsMenu)}
+                className={`p-3 md:p-3.5 rounded-xl transition-all duration-200 group relative cursor-pointer ${
+                  isMusicOpen
+                    ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                    : "bg-zinc-800/50 text-zinc-400 hover:bg-zinc-700 hover:text-white"
+                }`}
+              >
+                <Wrench className="w-5 h-5" />
+                <span className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-zinc-950 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none border border-zinc-800">
+                  Tools
+                </span>
+              </button>
+
+              {/* Tools dropdown */}
+              <AnimatePresence>
+                {showToolsMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 w-52 bg-zinc-900/95 backdrop-blur-xl border border-zinc-800/50 rounded-2xl p-2 shadow-2xl ring-1 ring-white/5"
+                  >
+                    <button
+                      onClick={() => {
+                        setIsMusicOpen(true);
+                        setShowToolsMenu(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-300 hover:text-white hover:bg-zinc-800/80 transition-all cursor-pointer"
+                    >
+                      <div className="p-1.5 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                        <Music className="w-4 h-4 text-emerald-400" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">Play Music</p>
+                        <p className="text-[10px] text-zinc-500">YouTube music bot</p>
+                      </div>
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
             <div className="w-px h-8 bg-zinc-800" />
 
             {/* Leave */}
@@ -1067,6 +1117,21 @@ export default function RoomVoiceChatPage() {
           </div>
         </div>
       </div>
+
+      {/* Music Player Panel */}
+      <RoomMusicPlayer
+        roomId={roomId}
+        isOpen={isMusicOpen}
+        onClose={() => setIsMusicOpen(false)}
+      />
+
+      {/* Close tools menu on click outside */}
+      {showToolsMenu && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setShowToolsMenu(false)}
+        />
+      )}
 
       <style jsx global>{`
         @keyframes music-bar {

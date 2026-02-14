@@ -202,6 +202,57 @@ connectDB().then(() => {
       socket.emit("rooms-counts", { counts });
     });
 
+    // ─── Music Bot Events ──────────────────────────────────────────
+    socket.on("music-add-to-queue", (data: { roomId: string; song: { videoId: string; title: string; thumbnail: string; duration: string; addedBy: string; addedByName: string } }) => {
+      const { roomId, song } = data;
+      // Broadcast to ALL in room (including sender, so their state syncs)
+      io.in(roomId).emit("music-add-to-queue", { song });
+    });
+
+    socket.on("music-play", (data: { roomId: string; index?: number }) => {
+      const { roomId, index } = data;
+      io.in(roomId).emit("music-play", { index });
+    });
+
+    socket.on("music-pause", (data: { roomId: string }) => {
+      io.in(data.roomId).emit("music-pause", {});
+    });
+
+    socket.on("music-resume", (data: { roomId: string }) => {
+      io.in(data.roomId).emit("music-resume", {});
+    });
+
+    socket.on("music-skip", (data: { roomId: string }) => {
+      io.in(data.roomId).emit("music-skip", {});
+    });
+
+    socket.on("music-stop", (data: { roomId: string }) => {
+      io.in(data.roomId).emit("music-stop", {});
+    });
+
+    socket.on("music-remove-from-queue", (data: { roomId: string; index: number }) => {
+      const { roomId, index } = data;
+      io.in(roomId).emit("music-remove-from-queue", { index });
+    });
+
+    socket.on("music-clear-queue", (data: { roomId: string }) => {
+      io.in(data.roomId).emit("music-clear-queue", {});
+    });
+
+    // When a new user joins a room, they request current music state
+    socket.on("music-request-state", (data: { roomId: string }) => {
+      // Ask everyone in the room (only the "host"/first responder replies)
+      socket.to(data.roomId).emit("music-state-request", { requesterId: socket.data.userId });
+    });
+
+    socket.on("music-state-response", (data: { roomId: string; requesterId: string; state: any }) => {
+      const { requesterId, state } = data;
+      const targetSocketId = userSockets.get(requesterId);
+      if (targetSocketId) {
+        io.to(targetSocketId).emit("music-state-sync", { state });
+      }
+    });
+
     // Generic Signaling for WebRTC (SimplePeer or Raw)
     socket.on("send-signal", (data) => {
       const socketIdToCall = onlineUsers.get(data.to);
