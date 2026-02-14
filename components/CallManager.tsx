@@ -59,6 +59,7 @@ export default function CallManager() {
 
   const myVideo = useRef<HTMLVideoElement>(null);
   const userVideo = useRef<HTMLVideoElement>(null);
+  const remoteAudio = useRef<HTMLAudioElement>(null);
   const connectionRef = useRef<RTCPeerConnection | null>(null);
   const incomingRingtone = useRef<HTMLAudioElement | null>(null);
   const outgoingRingtone = useRef<HTMLAudioElement | null>(null);
@@ -256,6 +257,8 @@ export default function CallManager() {
 
     if (myVideo.current) myVideo.current.srcObject = null;
     if (userVideo.current) userVideo.current.srcObject = null;
+    if (remoteAudio.current) remoteAudio.current.srcObject = null;
+    if (remoteAudio.current) remoteAudio.current.srcObject = null;
 
     iceCandidateBuffer.current = [];
     setIncomingCall(null);
@@ -468,8 +471,8 @@ export default function CallManager() {
     // Set stream on video element
     const remoteStream = event.streams[0];
     userVideo.current.srcObject = remoteStream;
-    userVideo.current.muted = false;
-    userVideo.current.volume = 1;
+    userVideo.current.muted = true;
+    userVideo.current.volume = 0;
 
     const tracks = remoteStream.getTracks();
     console.log(`[${role}] Set remote stream with ${tracks.length} tracks:`,
@@ -478,13 +481,28 @@ export default function CallManager() {
 
     userVideo.current.play()
       .then(() => {
-        console.log(`✅ [${role}] Remote video/audio playing (vol: ${userVideo.current!.volume}, muted: ${userVideo.current!.muted})`);
-        setAudioBlocked(false);
+        console.log(`✅ [${role}] Remote video playing (muted: ${userVideo.current!.muted})`);
       })
       .catch((err) => {
-        console.error(`❌ [${role}] Remote video/audio playback failed:`, err.message);
-        setAudioBlocked(true);
+        console.error(`❌ [${role}] Remote video playback failed:`, err.message);
       });
+
+    if (remoteAudio.current) {
+      remoteAudio.current.srcObject = remoteStream;
+      remoteAudio.current.muted = false;
+      remoteAudio.current.volume = 1;
+      remoteAudio.current.play()
+        .then(() => {
+          console.log(`✅ [${role}] Remote audio playing (vol: ${remoteAudio.current!.volume}, muted: ${remoteAudio.current!.muted})`);
+          setAudioBlocked(false);
+        })
+        .catch((err) => {
+          console.error(`❌ [${role}] Remote audio playback failed:`, err.message);
+          setAudioBlocked(true);
+        });
+    } else {
+      console.warn(`[${role}] Remote audio element not available`);
+    }
 
     startSpeakingDetector(remoteStream, setIsRemoteSpeaking, remoteAnalyserRef, remoteSpeakRaf);
   };
@@ -780,8 +798,8 @@ export default function CallManager() {
       outgoingRingtone.current.muted = false;
     }
     // Unmute WebRTC audio
-    if (userVideo.current && audioBlocked) {
-      userVideo.current.play()
+    if (remoteAudio.current && audioBlocked) {
+      remoteAudio.current.play()
         .then(() => {
           console.log("✅ Audio enabled by click");
           setAudioBlocked(false);
@@ -876,6 +894,7 @@ export default function CallManager() {
             </button>
           </div>
         </div>
+        <audio ref={remoteAudio} autoPlay className="hidden" />
       </div>
     );
   }
@@ -960,6 +979,7 @@ export default function CallManager() {
             <div className="hidden">
               <video playsInline muted ref={myVideo} autoPlay />
               <video playsInline ref={userVideo} autoPlay controls={false} />
+              <audio ref={remoteAudio} autoPlay />
             </div>
           </div>
         ) : (
@@ -1092,6 +1112,7 @@ export default function CallManager() {
               <video playsInline muted ref={myVideo} autoPlay />
               <video playsInline ref={userVideo} autoPlay controls={false} />
             </div>
+            <audio ref={remoteAudio} autoPlay className="hidden" />
           </div>
         )
       ) : (

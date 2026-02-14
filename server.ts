@@ -178,10 +178,10 @@ connectDB().then(() => {
     });
 
     // Keeping these for specific initial call intent if needed, but generic is better
-    socket.on("call-user", ({ userToCall, signalData, from, name, avatar }) => {
+    socket.on("call-user", ({ userToCall, signalData, from, name, avatar, callType }) => {
       const socketIdToCall = onlineUsers.get(userToCall);
       if (socketIdToCall) {
-        io.to(socketIdToCall).emit("call-made", { signal: signalData, from, name, avatar }); // from is userId
+        io.to(socketIdToCall).emit("call-made", { signal: signalData, from, name, avatar, callType }); // from is userId
       }
     });
 
