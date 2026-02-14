@@ -146,12 +146,13 @@ export default function RoomVoiceChatPage() {
       return;
     }
 
-    // If this page was loaded via browser refresh, kick back to dashboard
-    const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
-    if (navEntries.length > 0 && navEntries[0].type === 'reload') {
+    // If this page was loaded via browser refresh (no join intent flag), kick back to dashboard
+    const joinIntent = sessionStorage.getItem('room-join-intent');
+    if (!joinIntent) {
       router.replace("/dashboard/members");
       return;
     }
+    sessionStorage.removeItem('room-join-intent');
     
     let isActive = true;
     

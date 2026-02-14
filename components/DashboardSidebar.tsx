@@ -161,6 +161,7 @@ export function DashboardSidebar() {
 
     // Already in this room?
     if (isInRoom && currentRoomId === roomId) {
+      sessionStorage.setItem('room-join-intent', 'true');
       router.push(`/dashboard/rooms/${roomId}`);
       return;
     }
@@ -177,6 +178,7 @@ export function DashboardSidebar() {
       return;
     }
 
+    sessionStorage.setItem('room-join-intent', 'true');
     router.push(`/dashboard/rooms/${roomId}`);
   };
 
@@ -700,6 +702,7 @@ export function DashboardSidebar() {
                         const targetId = conflictModal.targetRoomId;
                         setConflictModal(null);
                         // Navigate to the new room — the room page will handle leaving via socket.data.currentRoom on server
+                        sessionStorage.setItem('room-join-intent', 'true');
                         router.push(`/dashboard/rooms/${targetId}`);
                       }}
                       className="flex-1 px-4 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl transition-all font-medium shadow-lg shadow-amber-900/20"
