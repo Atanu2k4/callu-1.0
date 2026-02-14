@@ -145,6 +145,13 @@ export default function RoomVoiceChatPage() {
       router.push("/dashboard/members");
       return;
     }
+
+    // If this page was loaded via browser refresh, kick back to dashboard
+    const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+    if (navEntries.length > 0 && navEntries[0].type === 'reload') {
+      router.replace("/dashboard/members");
+      return;
+    }
     
     let isActive = true;
     
