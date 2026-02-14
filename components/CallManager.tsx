@@ -37,7 +37,7 @@ const ICE_CONFIG: RTCConfiguration = {
 export default function CallManager() {
   const { user } = useAuth();
   const { socket } = useSocket();
-  const { outgoingCallData, setOutgoingCallData, setIsInCall } = useCall();
+  const { outgoingCallData, setOutgoingCallData, setIsInCall, isInRoom, currentRoomId, currentRoomName, setIsInRoom, setCurrentRoomId, setCurrentRoomName } = useCall();
 
   const [incomingCall, setIncomingCall] = useState<{
     from: string;
@@ -616,6 +616,21 @@ export default function CallManager() {
 
   // ─── START CALL (Caller) ─────────────────────────────────────
   const startCall = async (idToCall: string) => {
+    // If in a room, leave it before starting the call
+    if (isInRoom && currentRoomId && socket && user) {
+      socket.emit("leave-room", { roomId: currentRoomId, userId: user._id });
+      try {
+        await fetch("/api/rooms/leave", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomId: currentRoomId, userId: user._id }),
+        });
+      } catch {}
+      setIsInRoom(false);
+      setCurrentRoomId(null);
+      setCurrentRoomName(null);
+    }
+
     try {
       const callType = outgoingCallData?.callType || "voice";
       const mediaConstraints = {
@@ -738,6 +753,22 @@ export default function CallManager() {
   // ─── ANSWER CALL (Answerer) ──────────────────────────────────
   const answerCall = async () => {
     if (!incomingCall) return;
+
+    // If user is in a room, leave the room first
+    if (isInRoom && currentRoomId && socket && user) {
+      socket.emit("leave-room", { roomId: currentRoomId, userId: user._id });
+      // Leave room in DB
+      try {
+        await fetch("/api/rooms/leave", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomId: currentRoomId, userId: user._id }),
+        });
+      } catch {}  
+      setIsInRoom(false);
+      setCurrentRoomId(null);
+      setCurrentRoomName(null);
+    }
 
     // User clicked Accept — this IS a user gesture
     if (incomingRingtone.current?.muted) {
@@ -1916,6 +1947,13 @@ export default function CallManager() {
                 <p className="text-zinc-400 mb-8">
                   Incoming {incomingCall.callType === "video" ? "video" : "voice"} call...
                 </p>
+                {isInRoom && (
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 mb-6 max-w-xs text-center">
+                    <p className="text-amber-400 text-xs font-medium">
+                      ⚠️ Accepting will disconnect you from "{currentRoomName || "your room"}"
+                    </p>
+                  </div>
+                )}
                 <div className="flex gap-6">
                   <div className="flex flex-col items-center gap-2">
                     <button onClick={endCall} className="bg-red-500 hover:bg-red-600 p-5 rounded-full transition-all shadow-lg hover:shadow-red-500/50 cursor-pointer">

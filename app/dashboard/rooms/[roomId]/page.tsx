@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useRouter, useParams } from "next/navigation";
 import { Volume2, VolumeX, PhoneOff, Users as UsersIcon, Mic, MicOff } from "lucide-react";
 import { useSocket } from "@/context/SocketContext";
+import { useCall } from "@/context/CallContext";
 
 interface Room {
   _id: string;
@@ -42,6 +43,7 @@ export default function RoomVoiceChatPage() {
   const params = useParams();
   const roomId = params?.roomId as string;
   const { socket } = useSocket();
+  const { setIsInRoom, setCurrentRoomId, setCurrentRoomName } = useCall();
 
   const [room, setRoom] = useState<Room | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,6 +61,8 @@ export default function RoomVoiceChatPage() {
   const audioContext = useRef<AudioContext | null>(null);
   const animationFrames = useRef<Map<string, number>>(new Map());
   const iceCandidateBuffers = useRef<Map<string, RTCIceCandidateInit[]>>(new Map()); // Buffer ICE candidates per peer
+  const joinSoundRef = useRef<HTMLAudioElement | null>(null);
+  const leaveSoundRef = useRef<HTMLAudioElement | null>(null);
 
   const ICE_CONFIG: RTCConfiguration = {
     iceServers: [
@@ -87,6 +91,32 @@ export default function RoomVoiceChatPage() {
     iceTransportPolicy: "all",
   };
 
+  // Initialize join/leave sound effects
+  useEffect(() => {
+    joinSoundRef.current = new Audio("/music/join_sound.mp3");
+    joinSoundRef.current.volume = 0.5;
+    leaveSoundRef.current = new Audio("/music/Leave_Sound.mp3");
+    leaveSoundRef.current.volume = 0.5;
+    return () => {
+      joinSoundRef.current = null;
+      leaveSoundRef.current = null;
+    };
+  }, []);
+
+  const playJoinSound = () => {
+    if (joinSoundRef.current) {
+      joinSoundRef.current.currentTime = 0;
+      joinSoundRef.current.play().catch(() => {});
+    }
+  };
+
+  const playLeaveSound = () => {
+    if (leaveSoundRef.current) {
+      leaveSoundRef.current.currentTime = 0;
+      leaveSoundRef.current.play().catch(() => {});
+    }
+  };
+
   useEffect(() => {
     if (!user || !roomId) {
       router.push("/dashboard/members");
@@ -105,6 +135,10 @@ export default function RoomVoiceChatPage() {
       if (socket && stream && user) {
         socket.emit("join-room", { roomId, userId: user._id, userName: user.name, avatar: user.avatarConfig?.image, color: user.avatarConfig?.color });
       }
+
+      // Mark that we're in a room (for cross-feature conflict detection)
+      setIsInRoom(true);
+      setCurrentRoomId(roomId);
     };
     
     initializeRoom();
@@ -122,8 +156,10 @@ export default function RoomVoiceChatPage() {
     return () => {
       isActive = false;
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      // Don't auto-leave on component unmount (React strict mode causes double-mount)
-      // User must explicitly click leave button
+      // Clear room state on unmount
+      setIsInRoom(false);
+      setCurrentRoomId(null);
+      setCurrentRoomName(null);
     };
   }, [user, roomId, router]);
 
@@ -227,6 +263,7 @@ export default function RoomVoiceChatPage() {
       const data = await response.json();
       if (response.ok && data.rooms && data.rooms.length > 0) {
         setRoom(data.rooms[0]);
+        setCurrentRoomName(data.rooms[0].name);
       } else {
         alert("Room not found");
         router.push("/dashboard/members");
@@ -401,13 +438,16 @@ export default function RoomVoiceChatPage() {
       return [...prev, { userId: data.userId, name: data.userName, avatar: data.avatar, color: data.color, isSpeaking: false }];
     });
 
-    // Existing users: initiate offer to the newly joined user
+    // Play join sound for other users joining
     if (data.userId !== user?._id) {
+      playJoinSound();
       createPeerConnection(data.userId, true);
     }
   };
 
   const handleUserLeft = (data: { userId: string }) => {
+    // Play leave sound
+    playLeaveSound();
     setParticipants((prev) => prev.filter(p => p.userId !== data.userId));
     
     // Clean up peer connection
@@ -637,6 +677,11 @@ export default function RoomVoiceChatPage() {
     if (socket && roomId && user) {
       socket.emit("leave-room", { roomId, userId: user._id });
     }
+
+    // Clear room state
+    setIsInRoom(false);
+    setCurrentRoomId(null);
+    setCurrentRoomName(null);
 
     // Remove from DB participants
     try {

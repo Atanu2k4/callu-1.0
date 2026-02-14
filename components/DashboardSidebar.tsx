@@ -17,9 +17,11 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useSocket } from "@/context/SocketContext";
+import { useCall } from "@/context/CallContext";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { usePathname, useRouter } from "next/navigation";
+import { PhoneOff, DoorOpen } from "lucide-react";
 
 interface Room {
   _id: string;
@@ -55,8 +57,14 @@ export function DashboardSidebar() {
     maxParticipants: 10,
     roomType: "public" as "public" | "private",
   });
+  const [conflictModal, setConflictModal] = useState<{
+    type: "in-call" | "in-room";
+    targetRoomId: string;
+    targetRoomName: string;
+  } | null>(null);
   const { user, logout } = useAuth();
   const { socket } = useSocket();
+  const { isInCall, isInRoom, currentRoomId, currentRoomName } = useCall();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -144,7 +152,27 @@ export function DashboardSidebar() {
   };
 
   const handleJoinRoom = async (roomId: string) => {
-    // Join via WebSocket - participant management happens in the room page
+    const targetRoom = rooms.find(r => r._id === roomId);
+    const targetName = targetRoom?.name || "this room";
+
+    // Already in this room?
+    if (isInRoom && currentRoomId === roomId) {
+      router.push(`/dashboard/rooms/${roomId}`);
+      return;
+    }
+
+    // In a call? Must end it first.
+    if (isInCall) {
+      setConflictModal({ type: "in-call", targetRoomId: roomId, targetRoomName: targetName });
+      return;
+    }
+
+    // Already in another room? Must leave it first.
+    if (isInRoom && currentRoomId && currentRoomId !== roomId) {
+      setConflictModal({ type: "in-room", targetRoomId: roomId, targetRoomName: targetName });
+      return;
+    }
+
     router.push(`/dashboard/rooms/${roomId}`);
   };
 
@@ -542,6 +570,71 @@ export function DashboardSidebar() {
                     </button>
                   </div>
                 </form>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Conflict Modal — shown when user tries to join a room while in a call or another room */}
+      <AnimatePresence>
+        {conflictModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: "spring", duration: 0.5, bounce: 0.3 }}
+              className="bg-zinc-900 border border-zinc-800/50 rounded-3xl p-8 max-w-sm w-full shadow-2xl relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-64 h-64 bg-red-500/5 rounded-full blur-3xl -translate-y-1/2 -translate-x-1/2 pointer-events-none" />
+              
+              <div className="relative z-10">
+                <div className="w-14 h-14 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center justify-center mb-5">
+                  {conflictModal.type === "in-call" ? (
+                    <PhoneOff className="w-7 h-7 text-red-500" />
+                  ) : (
+                    <DoorOpen className="w-7 h-7 text-amber-500" />
+                  )}
+                </div>
+                
+                <h3 className="text-xl font-bold text-white mb-2 tracking-tight">
+                  {conflictModal.type === "in-call" ? "You're in a Call" : "Already in a Room"}
+                </h3>
+                <p className="text-sm text-zinc-400 leading-relaxed mb-6">
+                  {conflictModal.type === "in-call"
+                    ? `You need to end your current call before joining "${conflictModal.targetRoomName}".`
+                    : `You're currently in "${currentRoomName || "a room"}". Leave it to join "${conflictModal.targetRoomName}"?`
+                  }
+                </p>
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setConflictModal(null)}
+                    className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-all font-medium border border-transparent hover:border-zinc-600"
+                  >
+                    {conflictModal.type === "in-call" ? "No Thanks" : "Stay Here"}
+                  </button>
+                  
+                  {conflictModal.type === "in-room" && (
+                    <button
+                      onClick={() => {
+                        const targetId = conflictModal.targetRoomId;
+                        setConflictModal(null);
+                        // Navigate to the new room — the room page will handle leaving via socket.data.currentRoom on server
+                        router.push(`/dashboard/rooms/${targetId}`);
+                      }}
+                      className="flex-1 px-4 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl transition-all font-medium shadow-lg shadow-amber-900/20"
+                    >
+                      Leave & Join
+                    </button>
+                  )}
+                </div>
               </div>
             </motion.div>
           </motion.div>

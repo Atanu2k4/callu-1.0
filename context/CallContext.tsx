@@ -8,6 +8,13 @@ interface CallContextType {
   setOutgoingCallData: (data: { userId: string; userName: string; userAvatar?: string; callType: "voice" | "video" } | null) => void;
   isInCall: boolean;
   setIsInCall: (value: boolean) => void;
+  // Room state
+  isInRoom: boolean;
+  setIsInRoom: (value: boolean) => void;
+  currentRoomId: string | null;
+  setCurrentRoomId: (id: string | null) => void;
+  currentRoomName: string | null;
+  setCurrentRoomName: (name: string | null) => void;
 }
 
 const CallContext = createContext<CallContextType>({
@@ -16,11 +23,20 @@ const CallContext = createContext<CallContextType>({
   setOutgoingCallData: () => {},
   isInCall: false,
   setIsInCall: () => {},
+  isInRoom: false,
+  setIsInRoom: () => {},
+  currentRoomId: null,
+  setCurrentRoomId: () => {},
+  currentRoomName: null,
+  setCurrentRoomName: () => {},
 });
 
 export const CallProvider = ({ children }: { children: React.ReactNode }) => {
   const [outgoingCallData, setOutgoingCallData] = useState<{ userId: string; userName: string; userAvatar?: string; callType: "voice" | "video" } | null>(null);
   const [isInCall, setIsInCall] = useState(false);
+  const [isInRoom, setIsInRoom] = useState(false);
+  const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
+  const [currentRoomName, setCurrentRoomName] = useState<string | null>(null);
 
   const callUser = (userId: string, userName: string, userAvatar?: string, callType: "voice" | "video" = "voice") => {
     if (isInCall) {
@@ -32,7 +48,7 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <CallContext.Provider value={{ callUser, outgoingCallData, setOutgoingCallData, isInCall, setIsInCall }}>
+    <CallContext.Provider value={{ callUser, outgoingCallData, setOutgoingCallData, isInCall, setIsInCall, isInRoom, setIsInRoom, currentRoomId, setCurrentRoomId, currentRoomName, setCurrentRoomName }}>
       {children}
     </CallContext.Provider>
   );
