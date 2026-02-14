@@ -534,7 +534,7 @@ export function DashboardSidebar() {
                   </h2>
                   <button 
                     onClick={() => setShowCreateRoomModal(false)}
-                    className="p-2 bg-zinc-800/50 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors border border-transparent hover:border-zinc-700/50"
+                    className="p-2 bg-zinc-800/50 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors border border-transparent hover:border-zinc-700/50 cursor-pointer"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -623,14 +623,14 @@ export function DashboardSidebar() {
                     <button
                       type="button"
                       onClick={() => setShowCreateRoomModal(false)}
-                      className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-all font-medium border border-transparent hover:border-zinc-600"
+                      className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-all font-medium border border-transparent hover:border-zinc-600 cursor-pointer"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={creating}
-                      className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-900/20 hover:shadow-emerald-900/40 relative overflow-hidden group"
+                      className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-all font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-900/20 hover:shadow-emerald-900/40 relative overflow-hidden group"
                     >
                       <span className="relative z-10 flex items-center justify-center gap-2">
                         {creating ? (
