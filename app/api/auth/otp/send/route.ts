@@ -38,13 +38,22 @@ export async function POST(req: Request) {
     const codeHash = hashValue(code);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    console.log(`[OTP] Generating OTP for ${email}, code: ${code}`);
+    console.log(`[OTP_SEND] Generated code for ${email}:`);
+    console.log(`[OTP_SEND]   Code value: "${code}" (type: ${typeof code}, length: ${code.length})`);
+    console.log(`[OTP_SEND]   Code hash: ${codeHash.substring(0, 32)}...`);
+    console.log(`[OTP_SEND]   Expires at: ${expiresAt.toISOString()}`);
 
-    await LoginOtp.findOneAndUpdate(
+    const result = await LoginOtp.findOneAndUpdate(
       { email },
       { codeHash, expiresAt },
       { upsert: true, new: true }
     );
+
+    console.log(`[OTP_SEND] OTP document saved to DB:`, {
+      email: result.email,
+      codeHashStored: result.codeHash.substring(0, 32) + "...",
+      expiresAt: result.expiresAt.toISOString(),
+    });
 
     const subject = "Your CALLU verification code";
     const text = `Your CALLU verification code is ${code}. It expires in 10 minutes.`;
