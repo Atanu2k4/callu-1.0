@@ -4,8 +4,10 @@ import next from "next";
 import { Server } from "socket.io";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import ImageKit from "imagekit";
 import User from "./models/User";
 import Room from "./models/Room";
+import RoomChatUpload from "./models/RoomChatUpload";
 
 dotenv.config();
 
@@ -51,6 +53,61 @@ connectDB().then(() => {
   const onlineUsers = new Map<string, string>(); // userId -> socketId
   const roomParticipants = new Map<string, Map<string, { name: string; avatar: string | null; color: string; isVideoOn: boolean; isScreenSharing: boolean }>>(); // roomId -> Map of userId -> profile
   const userSockets = new Map<string, string>(); // userId -> socketId for rooms
+  const roomChatMessages = new Map<string, Array<{
+    id: string;
+    roomId: string;
+    userId: string;
+    userName: string;
+    userAvatar?: string | null;
+    content: string;
+    attachments?: Array<{ key: string; url: string; name: string; type: string; size: number; expiresAt: string }>;
+    createdAt: string;
+  }>>();
+
+  const imagekitPublicKey = process.env.IMAGEKIT_PUBLIC_KEY;
+  const imagekitPrivateKey = process.env.IMAGEKIT_PRIVATE_KEY;
+  const imagekitUrlEndpoint = process.env.IMAGEKIT_URL_ENDPOINT;
+  const canCleanupImageKit = Boolean(imagekitPublicKey && imagekitPrivateKey && imagekitUrlEndpoint);
+  const imagekit = canCleanupImageKit
+    ? new ImageKit({
+        publicKey: imagekitPublicKey!,
+        privateKey: imagekitPrivateKey!,
+        urlEndpoint: imagekitUrlEndpoint!,
+      })
+    : null;
+
+  const cleanupExpiredChatUploads = async () => {
+    if (!imagekit) return;
+    const now = new Date();
+    const expired = await RoomChatUpload.find({
+      expiresAt: { $lte: now },
+      deletedAt: { $exists: false },
+      provider: "imagekit",
+    }).limit(200);
+
+    for (const upload of expired) {
+      try {
+        await imagekit.deleteFile(upload.fileId || upload.key);
+        upload.deletedAt = new Date();
+        await upload.save();
+      } catch (error) {
+        console.error("Failed to delete expired chat upload:", upload.key, error);
+      }
+    }
+  };
+
+  if (canCleanupImageKit) {
+    cleanupExpiredChatUploads().catch((error) => {
+      console.error("Initial chat upload cleanup failed:", error);
+    });
+    setInterval(() => {
+      cleanupExpiredChatUploads().catch((error) => {
+        console.error("Scheduled chat upload cleanup failed:", error);
+      });
+    }, 60 * 60 * 1000);
+  } else {
+    console.warn("ImageKit chat cleanup disabled: missing ImageKit environment variables");
+  }
 
   const emitRoomCount = (roomId: string) => {
     const participantsMap = roomParticipants.get(roomId);
@@ -130,6 +187,8 @@ connectDB().then(() => {
         isScreenSharing: profile.isScreenSharing,
       }));
       socket.emit("room-participants", { participants });
+      const history = roomChatMessages.get(roomId) || [];
+      socket.emit("room-chat-history", { roomId, messages: history });
       emitRoomCount(roomId);
     });
 
@@ -187,6 +246,29 @@ connectDB().then(() => {
         profile.isScreenSharing = isSharing;
       }
       socket.to(roomId).emit("room-screen-share", { userId, isSharing });
+    });
+
+    socket.on("room-chat-history-request", (data: { roomId: string }) => {
+      const history = roomChatMessages.get(data.roomId) || [];
+      socket.emit("room-chat-history", { roomId: data.roomId, messages: history });
+    });
+
+    socket.on("room-chat-message", (message: { roomId: string; id?: string; userId: string; userName: string; userAvatar?: string | null; content: string; attachments?: Array<{ key: string; url: string; name: string; type: string; size: number; expiresAt: string }>; createdAt?: string }) => {
+      if (!message.roomId) return;
+      const normalized = {
+        ...message,
+        id: message.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        createdAt: message.createdAt || new Date().toISOString(),
+      };
+
+      const history = roomChatMessages.get(message.roomId) || [];
+      history.push(normalized);
+      if (history.length > 200) {
+        history.splice(0, history.length - 200);
+      }
+      roomChatMessages.set(message.roomId, history);
+
+      io.in(message.roomId).emit("room-chat-message", normalized);
     });
 
     socket.on("rooms-counts-request", () => {

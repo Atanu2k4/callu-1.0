@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { X, ArrowRight, Loader2, ShieldCheck, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
@@ -123,13 +123,24 @@ export default function ApplyModal({ onClose }: { onClose: () => void }) {
 }
 
 export function LoginModal({ onClose }: { onClose: () => void }) {
-    const { login } = useAuth();
+    const { login, requestLoginCode, verifyLoginCode } = useAuth();
     const router = useRouter();
     const [email, setEmail] = useState("");
     const [adminId, setAdminId] = useState("");
     const [password, setPassword] = useState("");
+    const [code, setCode] = useState("");
     const [isAdminMode, setIsAdminMode] = useState(false);
+    const [step, setStep] = useState<"email" | "code">("email");
     const [loading, setLoading] = useState(false);
+    const [resendCooldown, setResendCooldown] = useState(0);
+
+    useEffect(() => {
+        if (resendCooldown <= 0) return;
+        const timer = setTimeout(() => {
+            setResendCooldown((prev) => prev - 1);
+        }, 1000);
+        return () => clearTimeout(timer);
+    }, [resendCooldown]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -141,6 +152,41 @@ export function LoginModal({ onClose }: { onClose: () => void }) {
             if (stored.role === "admin") router.push("/admin");
             else router.push("/dashboard");
             onClose();
+        }
+    };
+
+    const handleSendCode = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!email) return;
+        setLoading(true);
+        const success = await requestLoginCode(email);
+        setLoading(false);
+        // Always move to code step to allow user to resend if first attempt failed
+        setStep("code");
+        if (success) {
+            setResendCooldown(30);
+        }
+    };
+
+    const handleVerifyCode = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!email || !code) return;
+        setLoading(true);
+        const success = await verifyLoginCode(email, code);
+        setLoading(false);
+        if (success) {
+            router.push("/dashboard");
+            onClose();
+        }
+    };
+
+    const handleResendCode = async () => {
+        if (!email || resendCooldown > 0) return;
+        setLoading(true);
+        const success = await requestLoginCode(email);
+        setLoading(false);
+        if (success) {
+            setResendCooldown(30);
         }
     };
 
@@ -176,7 +222,7 @@ export function LoginModal({ onClose }: { onClose: () => void }) {
                 </button>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={isAdminMode ? handleLogin : step === "email" ? handleSendCode : handleVerifyCode} className="space-y-4">
                 {isAdminMode ? (
                     <>
                         <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
@@ -198,7 +244,7 @@ export function LoginModal({ onClose }: { onClose: () => void }) {
                         </div>
                     </>
                 ) : (
-                    <div className="animate-in slide-in-from-left-4 duration-300">
+                    <div className="animate-in slide-in-from-left-4 duration-300 space-y-4">
                         <input 
                             required
                             type="email"
@@ -206,13 +252,28 @@ export function LoginModal({ onClose }: { onClose: () => void }) {
                             placeholder="access@member.com"
                             value={email}
                             onChange={e => setEmail(e.target.value)}
+                            disabled={step === "code"}
                         />
-                         <div className="mt-4 p-4 rounded-xl bg-zinc-900/30 border border-zinc-800/50 flex items-start gap-3">
+                        {step === "code" && (
+                          <input
+                            required
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            maxLength={6}
+                            className="w-full bg-zinc-900/50 border border-zinc-800/80 rounded-xl p-4 text-zinc-200 focus:outline-none focus:border-emerald-500/40 focus:bg-zinc-900 focus:ring-1 focus:ring-emerald-500/20 transition-all placeholder:text-zinc-700 font-dm tracking-[0.4em] text-center"
+                            placeholder="••••••"
+                            value={code}
+                            onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                          />
+                        )}
+                        <div className="p-4 rounded-xl bg-zinc-900/30 border border-zinc-800/50 flex items-start gap-3">
                             <div className="h-5 w-5 rounded-full border border-zinc-700 flex items-center justify-center mt-0.5 shrink-0">
                                 <div className="h-2.5 w-2.5 bg-zinc-600 rounded-full"></div>
                             </div>
                             <p className="text-xs text-zinc-500 leading-relaxed font-dm">
-                                By continuing, you agree to our private protocols. Connection is end-to-end encrypted.
+                                {step === "code"
+                                  ? "Enter the 6 digit code sent to your email. It expires in 10 minutes."
+                                  : "We will email a one-time verification code to log you in."}
                             </p>
                         </div>
                     </div>
@@ -222,8 +283,27 @@ export function LoginModal({ onClose }: { onClose: () => void }) {
                     type="submit" 
                     className="w-full bg-white text-black font-bold text-lg py-4 rounded-xl hover:bg-zinc-200 transition-all mt-6 flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)]"
                 >
-                    {loading ? <Loader2 className="animate-spin" /> : "Establish Connection"}
+                    {loading ? <Loader2 className="animate-spin" /> : isAdminMode ? "Establish Connection" : step === "email" ? "Send Code" : "Verify & Enter"}
                 </button>
+                {!isAdminMode && step === "code" && (
+                                    <div className="flex flex-col gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleResendCode}
+                                            disabled={loading || resendCooldown > 0}
+                                            className="w-full text-xs text-zinc-400 hover:text-white transition-colors disabled:opacity-50"
+                                        >
+                                            {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setStep("email")}
+                                            className="w-full text-xs text-zinc-400 hover:text-white transition-colors"
+                                        >
+                                            Change email address
+                                        </button>
+                                    </div>
+                )}
             </form>
           </div>
         </div>

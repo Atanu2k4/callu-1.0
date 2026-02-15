@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { Resend } from "resend";
 import dbConnect from "@/lib/db";
 import User from "@/models/User";
+import { sendNotifyMail } from "@/lib/notifyMail";
 
 const APP_URL = process.env.NEXT_PUBLIC_URL || "https://callu.onrender.com/";
 
@@ -35,20 +35,6 @@ export async function POST(req: Request) {
     if (targetUser.status !== "approved") {
       return NextResponse.json({ message: "Target user not approved" }, { status: 403 });
     }
-
-    const {
-      RESEND_API_KEY,
-      RESEND_FROM_EMAIL,
-    } = process.env;
-
-    if (!RESEND_API_KEY || !RESEND_FROM_EMAIL) {
-      return NextResponse.json(
-        { message: "Email service is not configured" },
-        { status: 500 }
-      );
-    }
-
-    const resend = new Resend(RESEND_API_KEY);
 
     const callerName = callerUser.name || "A member";
     const callerAvatar = callerUser.avatarConfig?.image || "";
@@ -145,7 +131,12 @@ export async function POST(req: Request) {
       `,
     };
 
-    await resend.emails.send(mailOptions);
+    await sendNotifyMail({
+      to: targetUser.email,
+      subject: mailOptions.subject,
+      text: mailOptions.text,
+      html: mailOptions.html,
+    });
 
     return NextResponse.json({ message: "Notification sent" }, { status: 200 });
   } catch (error: any) {

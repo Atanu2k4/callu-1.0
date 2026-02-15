@@ -8,7 +8,7 @@ import {
   Volume2, VolumeX, PhoneOff, Mic, MicOff,
   Video, VideoOff, MonitorUp, MonitorOff,
   PictureInPicture2, LayoutGrid, Maximize2,
-  Wrench, Music,
+  Wrench, Music, MessageSquare, X, Paperclip, Send, File as FileIcon, Folder as FolderIcon,
 } from "lucide-react";
 import { useSocket } from "@/context/SocketContext";
 import { useRoomVoice } from "@/context/RoomVoiceContext";
@@ -28,6 +28,26 @@ interface Room {
   maxParticipants: number;
   isActive: boolean;
   roomType: "public" | "private";
+}
+
+interface ChatAttachment {
+  key: string;
+  url: string;
+  name: string;
+  type: string;
+  size: number;
+  expiresAt: string;
+}
+
+interface ChatMessage {
+  id: string;
+  roomId: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string | null;
+  content: string;
+  attachments?: ChatAttachment[];
+  createdAt: string;
 }
 
 export default function RoomVoiceChatPage() {
@@ -67,6 +87,16 @@ export default function RoomVoiceChatPage() {
   const [spotlightUserId, setSpotlightUserId] = useState<string | null>(null);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const { isMusicPanelOpen: isMusicOpen, openMusicPlayer, closeMusicPanel, disconnectMusic, connectMusicRoom } = useRoomMusic();
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const chatListRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
 
   // ─── Local refs (video-only, page-scoped) ───────────────────────
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -314,6 +344,158 @@ export default function RoomVoiceChatPage() {
       setSpotlightUserId(null);
     }
   }, [participants, spotlightUserId]);
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  Room Chat
+  // ═══════════════════════════════════════════════════════════════════
+
+  useEffect(() => {
+    if (folderInputRef.current) {
+      const folderInput = folderInputRef.current as HTMLInputElement & {
+        webkitdirectory?: boolean;
+        directory?: boolean;
+      };
+      folderInput.webkitdirectory = true;
+      folderInput.directory = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isMusicOpen && isChatOpen) {
+      setIsChatOpen(false);
+    }
+  }, [isMusicOpen, isChatOpen]);
+
+  useEffect(() => {
+    if (isChatOpen) {
+      setUnreadCount(0);
+    }
+  }, [isChatOpen]);
+
+  useEffect(() => {
+    if (!socket || !roomId) return;
+
+    const handleHistory = (payload: { roomId: string; messages: ChatMessage[] }) => {
+      if (payload.roomId !== roomId) return;
+      setChatMessages(payload.messages || []);
+    };
+
+    const handleMessage = (message: ChatMessage) => {
+      if (message.roomId !== roomId) return;
+      setChatMessages((prev) => {
+        if (prev.some((m) => m.id === message.id)) return prev;
+        return [...prev, message].slice(-200);
+      });
+      if (!isChatOpen && message.userId !== user?._id) {
+        setUnreadCount((prev) => prev + 1);
+      }
+    };
+
+    socket.on("room-chat-history", handleHistory);
+    socket.on("room-chat-message", handleMessage);
+    socket.emit("room-chat-history-request", { roomId });
+
+    return () => {
+      socket.off("room-chat-history", handleHistory);
+      socket.off("room-chat-message", handleMessage);
+    };
+  }, [socket, roomId, user?._id, isChatOpen]);
+
+  useEffect(() => {
+    if (chatListRef.current) {
+      chatListRef.current.scrollTop = chatListRef.current.scrollHeight;
+    }
+  }, [chatMessages, isChatOpen]);
+
+  const openChatPanel = () => {
+    closeMusicPanel();
+    setShowToolsMenu(false);
+    setIsChatOpen(true);
+  };
+
+  const addPendingFiles = (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    setPendingFiles((prev) => [...prev, ...files]);
+    const count = files.length;
+    toast.success(`${count} file${count === 1 ? "" : "s"} added. Tap Send to share.`);
+  };
+
+  const removePendingFile = (index: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadChatFiles = async (files: File[]) => {
+    if (!files.length) return [] as ChatAttachment[];
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("roomId", roomId);
+      if (user?._id) formData.append("userId", user._id);
+      files.forEach((file) => formData.append("files", file, file.name));
+
+      const response = await fetch("/api/rooms/chat/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || "Upload failed");
+      }
+      return (data.attachments || []) as ChatAttachment[];
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!socket || !user || !roomId) return;
+    const trimmed = chatInput.trim();
+    if (!trimmed && pendingFiles.length === 0) return;
+
+    let attachments: ChatAttachment[] = [];
+    if (pendingFiles.length > 0) {
+      try {
+        attachments = await uploadChatFiles(pendingFiles);
+      } catch (error: any) {
+        console.error(error);
+        const message = error?.message || "Failed to upload files";
+        toast.error(message);
+        return;
+      }
+    }
+
+    const message: ChatMessage = {
+      id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      roomId,
+      userId: user._id,
+      userName: user.name,
+      userAvatar: user.avatarConfig?.image || null,
+      content: trimmed,
+      attachments,
+      createdAt: new Date().toISOString(),
+    };
+
+    setChatMessages((prev) => {
+      if (prev.some((m) => m.id === message.id)) return prev;
+      return [...prev, message].slice(-200);
+    });
+    socket.emit("room-chat-message", message);
+    setChatInput("");
+    setPendingFiles([]);
+  };
+
+  const formatFileSize = (size: number) => {
+    if (size < 1024) return `${size} B`;
+    const kb = size / 1024;
+    if (kb < 1024) return `${kb.toFixed(1)} KB`;
+    const mb = kb / 1024;
+    return `${mb.toFixed(1)} MB`;
+  };
+
+  const formatChatTime = (value: string) =>
+    new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
   // ═══════════════════════════════════════════════════════════════════
   //  Toggle Camera
@@ -702,6 +884,23 @@ export default function RoomVoiceChatPage() {
                 {participants.length} / {room.maxParticipants}
               </span>
             </div>
+
+            <button
+              onClick={() => (isChatOpen ? setIsChatOpen(false) : openChatPanel())}
+              className={`relative flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold ${
+                isChatOpen
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                  : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700"
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              Chat
+              {unreadCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-emerald-500 text-emerald-950 text-[10px] font-bold flex items-center justify-center">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </button>
           </div>
         </header>
 
@@ -1057,6 +1256,26 @@ export default function RoomVoiceChatPage() {
               </span>
             </button>
 
+            {/* Chat (mobile) */}
+            <button
+              onClick={() => (isChatOpen ? setIsChatOpen(false) : openChatPanel())}
+              className={`sm:hidden p-3 md:p-3.5 rounded-xl transition-all duration-200 group relative cursor-pointer ${
+                isChatOpen
+                  ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                  : "bg-zinc-800/50 text-zinc-400 hover:bg-zinc-700 hover:text-white"
+              }`}
+            >
+              <MessageSquare className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-emerald-500 text-emerald-950 text-[9px] font-bold flex items-center justify-center">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+              <span className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-zinc-950 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none border border-zinc-800">
+                Room Chat
+              </span>
+            </button>
+
             {/* Tools */}
             <div className="relative">
               <button
@@ -1086,6 +1305,7 @@ export default function RoomVoiceChatPage() {
                     <button
                       onClick={() => {
                         openMusicPlayer(roomId);
+                        setIsChatOpen(false);
                         setShowToolsMenu(false);
                       }}
                       className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-300 hover:text-white hover:bg-zinc-800/80 transition-all cursor-pointer"
@@ -1130,6 +1350,241 @@ export default function RoomVoiceChatPage() {
           onClick={() => setShowToolsMenu(false)}
         />
       )}
+
+      {/* Room Chat Panel */}
+      <AnimatePresence>
+        {isChatOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/40 z-[55] sm:hidden"
+              onClick={() => setIsChatOpen(false)}
+            />
+            <motion.aside
+              initial={{ x: 480, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 480, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 260, damping: 30 }}
+              className="fixed top-0 right-0 h-full w-full sm:w-[380px] md:w-[420px] bg-zinc-950/95 backdrop-blur-xl border-l border-zinc-800/60 z-[60] flex flex-col shadow-2xl ring-1 ring-white/5"
+            >
+              <div className="px-5 py-4 border-b border-zinc-800/70 flex items-center justify-between bg-gradient-to-b from-zinc-950/90 to-transparent">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                    <MessageSquare className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wider text-zinc-500">Room Chat</p>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-white font-semibold tracking-tight">{room?.name || "Room"}</h3>
+                      <span className="flex items-center gap-1 text-[10px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">
+                        <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
+                        Live
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsChatOpen(false)}
+                  className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800/60 transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div ref={chatListRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+                {chatMessages.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center text-zinc-500 gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                      <MessageSquare className="w-6 h-6 text-emerald-400/80" />
+                    </div>
+                    <p className="text-sm">Start the conversation. Your room chat lives here.</p>
+                  </div>
+                ) : (
+                  chatMessages.map((msg) => {
+                    const isMine = msg.userId === user?._id;
+                    return (
+                      <motion.div
+                        key={msg.id}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.18 }}
+                        className={`flex ${isMine ? "justify-end" : "justify-start"}`}
+                      >
+                        <div className={`max-w-[82%] rounded-2xl px-3.5 py-3 border shadow-sm ${
+                          isMine
+                            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-50 shadow-emerald-500/10"
+                            : "bg-zinc-900/70 border-zinc-800/60 text-zinc-100"
+                        }`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            {!isMine && (
+                              <div className="w-6 h-6 rounded-full overflow-hidden bg-zinc-800 border border-zinc-700">
+                                {msg.userAvatar ? (
+                                  <img src={msg.userAvatar} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-[11px] font-bold text-white/80">
+                                    {msg.userName?.[0]?.toUpperCase() || "U"}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            <span className={`text-xs font-semibold ${isMine ? "text-emerald-200" : "text-zinc-300"}`}>
+                              {isMine ? "You" : msg.userName}
+                            </span>
+                            <span className="text-[10px] text-zinc-500">{formatChatTime(msg.createdAt)}</span>
+                          </div>
+
+                          {msg.content && (
+                            <p className="text-sm leading-relaxed text-zinc-100/90 whitespace-pre-wrap">{msg.content}</p>
+                          )}
+
+                          {msg.attachments && msg.attachments.length > 0 && (
+                            <div className="mt-3 space-y-2">
+                              {msg.attachments.map((file) => {
+                                const isExpired = new Date(file.expiresAt).getTime() <= Date.now();
+                                const isImage = file.type?.startsWith("image/");
+                                return (
+                                  <div
+                                    key={file.key}
+                                    className={`rounded-xl border px-3 py-2 ${
+                                      isExpired
+                                        ? "border-zinc-800 bg-zinc-900/40 text-zinc-500"
+                                        : "border-zinc-800/70 bg-zinc-900/70 text-zinc-200"
+                                    }`}
+                                  >
+                                    {isImage && !isExpired ? (
+                                      <a href={file.url} target="_blank" rel="noreferrer" className="block">
+                                        <img
+                                          src={file.url}
+                                          alt={file.name}
+                                          className="w-full max-h-56 object-cover rounded-lg border border-zinc-800/60"
+                                          loading="lazy"
+                                        />
+                                      </a>
+                                    ) : null}
+                                    <div className="flex items-center justify-between gap-3 mt-2">
+                                      <div className="min-w-0">
+                                        <p className="text-xs font-semibold truncate">{file.name}</p>
+                                        <p className="text-[10px] text-zinc-500">{formatFileSize(file.size)}</p>
+                                      </div>
+                                      {isExpired ? (
+                                        <span className="text-[10px] uppercase text-zinc-500">Expired</span>
+                                      ) : (
+                                        <a
+                                          href={file.url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="text-[10px] uppercase text-emerald-300 hover:text-emerald-200"
+                                        >
+                                          Open
+                                        </a>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })
+                )}
+              </div>
+
+              {pendingFiles.length > 0 && (
+                <div className="px-5 pb-2 space-y-2">
+                  {pendingFiles.map((file, index) => (
+                    <div key={`${file.name}-${index}`} className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl border border-zinc-800/70 bg-zinc-900/60">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-zinc-200 truncate">{file.name}</p>
+                          <p className="text-[10px] text-zinc-500">{formatFileSize(file.size)}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => removePendingFile(index)}
+                        className="p-1 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800/70"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="p-4 border-t border-zinc-800/70 bg-zinc-950/90">
+                <div className="flex items-end gap-2">
+                  <div className="flex-1 rounded-2xl border border-zinc-800/80 bg-zinc-900/70 px-3 py-2 transition focus-within:border-emerald-500/40 focus-within:ring-1 focus-within:ring-emerald-500/30">
+                    <textarea
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          void handleSendMessage();
+                        }
+                      }}
+                      placeholder="Message the room..."
+                      rows={1}
+                      className="w-full bg-transparent text-sm text-white placeholder:text-zinc-500 resize-none focus:outline-none"
+                    />
+                  </div>
+
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-2.5 rounded-xl bg-zinc-800/70 text-zinc-400 hover:text-white hover:bg-zinc-700 transition"
+                    disabled={isUploading}
+                  >
+                    <Paperclip className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={() => folderInputRef.current?.click()}
+                    className="p-2.5 rounded-xl bg-zinc-800/70 text-zinc-400 hover:text-white hover:bg-zinc-700 transition"
+                    disabled={isUploading}
+                  >
+                    <FolderIcon className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={() => void handleSendMessage()}
+                    disabled={isUploading || (!chatInput.trim() && pendingFiles.length === 0)}
+                    className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                </div>
+                {isUploading && (
+                  <p className="text-[10px] text-emerald-400 mt-2">Uploading files...</p>
+                )}
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    addPendingFiles(e.target.files);
+                    e.currentTarget.value = "";
+                  }}
+                />
+                <input
+                  ref={folderInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    addPendingFiles(e.target.files);
+                    e.currentTarget.value = "";
+                  }}
+                />
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Music Player Panel – now rendered persistently in dashboard layout */}
 
