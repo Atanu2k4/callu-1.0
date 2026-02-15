@@ -66,7 +66,7 @@ export default function RoomVoiceChatPage() {
   const [layout, setLayout] = useState<"grid" | "spotlight">("grid");
   const [spotlightUserId, setSpotlightUserId] = useState<string | null>(null);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
-  const { isMusicPanelOpen: isMusicOpen, openMusicPlayer, closeMusicPanel } = useRoomMusic();
+  const { isMusicPanelOpen: isMusicOpen, openMusicPlayer, closeMusicPanel, disconnectMusic, connectMusicRoom } = useRoomMusic();
 
   // ─── Local refs (video-only, page-scoped) ───────────────────────
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -130,6 +130,7 @@ export default function RoomVoiceChatPage() {
     // Connected to a DIFFERENT room → leave old, join new
     if (isVoiceConnected && voiceRoomId !== roomId) {
       leaveVoice();
+      disconnectMusic(); // Stop music from old room
     }
 
     // Refresh protection: no join-intent flag → kick to dashboard
@@ -145,7 +146,10 @@ export default function RoomVoiceChatPage() {
       if (!roomData) return;
 
       const success = await joinVoice(roomId, roomData.name);
-      if (!success) {
+      if (success) {
+        // Auto-connect music so new joiners hear active music without clicking Tools
+        connectMusicRoom(roomId);
+      } else {
         toast.error("Failed to join voice channel");
         router.push("/dashboard/members");
       }

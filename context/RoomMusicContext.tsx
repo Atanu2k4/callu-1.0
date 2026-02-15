@@ -13,6 +13,8 @@ interface RoomMusicContextType {
   closeMusicPanel: () => void;
   /** Fully disconnect music (stops playback, clears room) */
   disconnectMusic: () => void;
+  /** Connect music to a room without opening the panel (for auto-sync) */
+  connectMusicRoom: (roomId: string) => void;
 }
 
 const RoomMusicContext = createContext<RoomMusicContextType>({
@@ -21,6 +23,7 @@ const RoomMusicContext = createContext<RoomMusicContextType>({
   openMusicPlayer: () => {},
   closeMusicPanel: () => {},
   disconnectMusic: () => {},
+  connectMusicRoom: () => {},
 });
 
 export function RoomMusicProvider({ children }: { children: React.ReactNode }) {
@@ -41,6 +44,11 @@ export function RoomMusicProvider({ children }: { children: React.ReactNode }) {
     setIsMusicPanelOpen(false);
   }, []);
 
+  const connectMusicRoom = useCallback((roomId: string) => {
+    setMusicRoomId(roomId);
+    // Don't open the panel — just connect so music can auto-sync
+  }, []);
+
   return (
     <RoomMusicContext.Provider
       value={{
@@ -49,6 +57,7 @@ export function RoomMusicProvider({ children }: { children: React.ReactNode }) {
         openMusicPlayer,
         closeMusicPanel,
         disconnectMusic,
+        connectMusicRoom,
       }}
     >
       {children}

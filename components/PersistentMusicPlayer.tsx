@@ -14,6 +14,7 @@ export default function PersistentMusicPlayer() {
 
   return (
     <RoomMusicPlayer
+      key={musicRoomId}
       roomId={musicRoomId}
       isOpen={isMusicPanelOpen}
       onClose={closeMusicPanel}

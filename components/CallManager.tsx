@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { useSocket } from "@/context/SocketContext";
 import { useAuth } from "@/context/AuthContext";
 import { useCall } from "@/context/CallContext";
+import { useRoomVoice } from "@/context/RoomVoiceContext";
+import { useRoomMusic } from "@/context/RoomMusicContext";
 import { Phone, PhoneOff, Mic, MicOff, Minimize2, Maximize2, Video, VideoOff, Volume2, ChevronDown, MonitorUp, MonitorOff, ArrowsUpFromLine, PictureInPicture2 } from "lucide-react";
 import { DotLottieReact } from "@lottiefiles/dotlottie-react";
 import { toast } from "sonner";
@@ -39,6 +41,8 @@ export default function CallManager() {
   const { user } = useAuth();
   const { socket } = useSocket();
   const { outgoingCallData, setOutgoingCallData, setIsInCall, isInRoom, currentRoomId, currentRoomName, setIsInRoom, setCurrentRoomId, setCurrentRoomName } = useCall();
+  const { isVoiceConnected, leaveVoice, voiceRoomName } = useRoomVoice();
+  const { disconnectMusic } = useRoomMusic();
 
   const [incomingCall, setIncomingCall] = useState<{
     from: string;
@@ -97,6 +101,24 @@ export default function CallManager() {
   const audioUnlocked = useRef(false);
   // Use ref for stream so cleanup always has latest value
   const streamRef = useRef<MediaStream | null>(null);
+
+  // Refs for beforeunload call cleanup (avoids stale closures)
+  const outgoingCallDataRef = useRef(outgoingCallData);
+  const incomingCallRef = useRef(incomingCall);
+  useEffect(() => { outgoingCallDataRef.current = outgoingCallData; }, [outgoingCallData]);
+  useEffect(() => { incomingCallRef.current = incomingCall; }, [incomingCall]);
+
+  // ─── Notify other party on page close/refresh ───────────────
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const otherUserId = incomingCallRef.current?.from || outgoingCallDataRef.current?.userId;
+      if (otherUserId && socket) {
+        socket.emit("end-call", { to: otherUserId, from: user?._id });
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [socket, user]);
 
   // ─── Audio helpers ───────────────────────────────────────────
   const playRingtone = (audio: HTMLAudioElement | null, name: string) => {
@@ -617,19 +639,11 @@ export default function CallManager() {
 
   // ─── START CALL (Caller) ─────────────────────────────────────
   const startCall = async (idToCall: string) => {
-    // If in a room, leave it before starting the call
-    if (isInRoom && currentRoomId && socket && user) {
-      socket.emit("leave-room", { roomId: currentRoomId, userId: user._id });
-      try {
-        await fetch("/api/rooms/leave", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ roomId: currentRoomId, userId: user._id }),
-        });
-      } catch {}
-      setIsInRoom(false);
-      setCurrentRoomId(null);
-      setCurrentRoomName(null);
+    // If in a room, properly disconnect voice + music before starting the call
+    if (isVoiceConnected) {
+      leaveVoice();
+      disconnectMusic();
+      toast.info("Disconnected from room to start call");
     }
 
     try {
@@ -755,20 +769,11 @@ export default function CallManager() {
   const answerCall = async () => {
     if (!incomingCall) return;
 
-    // If user is in a room, leave the room first
-    if (isInRoom && currentRoomId && socket && user) {
-      socket.emit("leave-room", { roomId: currentRoomId, userId: user._id });
-      // Leave room in DB
-      try {
-        await fetch("/api/rooms/leave", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ roomId: currentRoomId, userId: user._id }),
-        });
-      } catch {}  
-      setIsInRoom(false);
-      setCurrentRoomId(null);
-      setCurrentRoomName(null);
+    // If in a room, properly disconnect voice + music before accepting the call
+    if (isVoiceConnected) {
+      leaveVoice();
+      disconnectMusic();
+      toast.info("Disconnected from room to accept call");
     }
 
     // User clicked Accept — this IS a user gesture
@@ -1948,10 +1953,10 @@ export default function CallManager() {
                 <p className="text-zinc-400 mb-8">
                   Incoming {incomingCall.callType === "video" ? "video" : "voice"} call...
                 </p>
-                {isInRoom && (
+                {isVoiceConnected && (
                   <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 mb-6 max-w-xs text-center">
                     <p className="text-amber-400 text-xs font-medium">
-                      ⚠️ Accepting will disconnect you from "{currentRoomName || "your room"}"
+                      ⚠️ Accepting will disconnect you from &quot;{voiceRoomName || "your room"}&quot;
                     </p>
                   </div>
                 )}
