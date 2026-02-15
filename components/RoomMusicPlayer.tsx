@@ -94,7 +94,6 @@ export default function RoomMusicPlayer({ roomId, isOpen, onClose, onOpen }: Roo
   const playerOpts: YouTubeProps["opts"] = {
     height: "1",
     width: "1",
-    host: "https://www.youtube-nocookie.com",
     playerVars: {
       autoplay: 1,
       controls: 0,
