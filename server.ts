@@ -161,6 +161,7 @@ connectDB().then(() => {
           roomParticipants.get(prevRoomId)!.delete(userId);
           if (roomParticipants.get(prevRoomId)!.size === 0) {
             roomParticipants.delete(prevRoomId);
+            roomChatMessages.delete(prevRoomId);
           }
         }
         socket.to(prevRoomId).emit("room-user-left", { userId });
@@ -207,6 +208,7 @@ connectDB().then(() => {
         roomParticipants.get(roomId)!.delete(userId);
         if (roomParticipants.get(roomId)!.size === 0) {
           roomParticipants.delete(roomId);
+          roomChatMessages.delete(roomId);
         }
       }
       
@@ -406,6 +408,7 @@ connectDB().then(() => {
           roomParticipants.get(currentRoom)!.delete(userId);
           if (roomParticipants.get(currentRoom)!.size === 0) {
             roomParticipants.delete(currentRoom);
+            roomChatMessages.delete(currentRoom);
           }
         }
         userSockets.delete(userId);

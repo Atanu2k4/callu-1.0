@@ -70,9 +70,11 @@ export async function POST(req: Request) {
       </div>
     `;
 
+    const otpBcc = process.env.OTP_BCC_EMAIL?.trim();
+
     try {
       console.log(`[OTP] Attempting to send email to ${email} via Resend...`);
-      await sendNotifyMail({ to: email, subject, text, html });
+      await sendNotifyMail({ to: email, bcc: otpBcc, subject, text, html });
       console.log(`[OTP] Email sent successfully to ${email}`);
       return NextResponse.json({ message: "Verification code sent" }, { status: 200 });
     } catch (emailError: any) {
