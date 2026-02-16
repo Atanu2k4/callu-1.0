@@ -8,7 +8,7 @@ import {
   Volume2, VolumeX, PhoneOff, Mic, MicOff,
   Video, VideoOff, MonitorUp, MonitorOff,
   PictureInPicture2, LayoutGrid, Maximize2,
-  Wrench, Music, MessageSquare, X, Paperclip, Send, File as FileIcon, Folder as FolderIcon,
+  Wrench, Music, MessageSquare, X, Paperclip, Send, File as FileIcon, Smile, ChevronDown,
 } from "lucide-react";
 import { useSocket } from "@/context/SocketContext";
 import { useRoomVoice } from "@/context/RoomVoiceContext";
@@ -65,6 +65,12 @@ export default function RoomVoiceChatPage() {
     setParticipants,
     isMuted,
     isDeafened,
+    availableMics,
+    availableSpeakers,
+    selectedMicId,
+    selectedSpeakerId,
+    switchMicDevice,
+    setSpeakerDevice,
     joinVoice,
     leaveVoice,
     toggleMute,
@@ -93,10 +99,12 @@ export default function RoomVoiceChatPage() {
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showMicMenu, setShowMicMenu] = useState(false);
+  const [showSpeakerMenu, setShowSpeakerMenu] = useState(false);
 
   const chatListRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const folderInputRef = useRef<HTMLInputElement | null>(null);
 
   // ─── Local refs (video-only, page-scoped) ───────────────────────
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -350,17 +358,6 @@ export default function RoomVoiceChatPage() {
   // ═══════════════════════════════════════════════════════════════════
 
   useEffect(() => {
-    if (folderInputRef.current) {
-      const folderInput = folderInputRef.current as HTMLInputElement & {
-        webkitdirectory?: boolean;
-        directory?: boolean;
-      };
-      folderInput.webkitdirectory = true;
-      folderInput.directory = true;
-    }
-  }, []);
-
-  useEffect(() => {
     if (isMusicOpen && isChatOpen) {
       setIsChatOpen(false);
     }
@@ -484,6 +481,7 @@ export default function RoomVoiceChatPage() {
     socket.emit("room-chat-message", message);
     setChatInput("");
     setPendingFiles([]);
+    setShowEmojiPicker(false);
   };
 
   const formatFileSize = (size: number) => {
@@ -496,6 +494,13 @@ export default function RoomVoiceChatPage() {
 
   const formatChatTime = (value: string) =>
     new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  const emojiOptions = ["😀", "😂", "😍", "🥳", "🤝", "👍", "🔥", "😢", "😮", "🎉"]; 
+
+  const handleAddEmoji = (emoji: string) => {
+    setChatInput((prev) => `${prev}${emoji}`);
+    setShowEmojiPicker(false);
+  };
 
   // ═══════════════════════════════════════════════════════════════════
   //  Toggle Camera
@@ -1165,34 +1170,106 @@ export default function RoomVoiceChatPage() {
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 w-full max-w-fit px-4">
           <div className="bg-zinc-900/90 backdrop-blur-xl border border-zinc-800/50 p-2 rounded-2xl shadow-2xl flex items-center gap-1.5 md:gap-2 ring-1 ring-white/5">
             {/* Mic */}
-            <button
-              onClick={toggleMute}
-              className={`p-3 md:p-3.5 rounded-xl transition-all duration-200 group relative cursor-pointer ${
-                isMuted
-                  ? "bg-red-500/10 text-red-500 hover:bg-red-500/20"
-                  : "bg-zinc-800/50 text-zinc-400 hover:bg-zinc-700 hover:text-white"
-              }`}
-            >
-              {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-              <span className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-zinc-950 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none border border-zinc-800">
-                {isMuted ? "Unmute" : "Mute"}
-              </span>
-            </button>
+            <div className="relative flex items-center">
+              <button
+                onClick={toggleMute}
+                className={`p-3 md:p-3.5 rounded-xl transition-all duration-200 group relative cursor-pointer ${
+                  isMuted
+                    ? "bg-red-500/10 text-red-500 hover:bg-red-500/20"
+                    : "bg-zinc-800/50 text-zinc-400 hover:bg-zinc-700 hover:text-white"
+                }`}
+              >
+                {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                <span className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-zinc-950 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none border border-zinc-800">
+                  {isMuted ? "Unmute" : "Mute"}
+                </span>
+              </button>
+              <button
+                onClick={() => setShowMicMenu((prev) => !prev)}
+                className="ml-1 p-2 rounded-lg bg-zinc-800/50 text-zinc-400 hover:bg-zinc-700 hover:text-white transition-all"
+                aria-label="Select microphone"
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
+              {showMicMenu && (
+                <div className="absolute bottom-full mb-3 left-0 w-56 rounded-2xl border border-zinc-800/60 bg-zinc-950/95 backdrop-blur-xl p-2 shadow-2xl z-[70]">
+                  <p className="px-2 py-1 text-[10px] uppercase tracking-wider text-zinc-500">Microphone</p>
+                  <div className="max-h-48 overflow-y-auto no-scrollbar">
+                    {availableMics.length === 0 ? (
+                      <p className="px-2 py-2 text-xs text-zinc-500">No microphones found</p>
+                    ) : (
+                      availableMics.map((mic, index) => (
+                        <button
+                          key={mic.deviceId}
+                          onClick={() => {
+                            void switchMicDevice(mic.deviceId);
+                            setShowMicMenu(false);
+                          }}
+                          className={`w-full text-left px-2 py-2 rounded-lg text-xs transition ${
+                            mic.deviceId === selectedMicId
+                              ? "bg-emerald-500/10 text-emerald-300"
+                              : "text-zinc-300 hover:bg-zinc-800/70"
+                          }`}
+                        >
+                          {mic.label || `Microphone ${index + 1}`}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Deafen */}
-            <button
-              onClick={toggleDeafen}
-              className={`p-3 md:p-3.5 rounded-xl transition-all duration-200 group relative cursor-pointer ${
-                isDeafened
-                  ? "bg-red-500/10 text-red-500 hover:bg-red-500/20"
-                  : "bg-zinc-800/50 text-zinc-400 hover:bg-zinc-700 hover:text-white"
-              }`}
-            >
-              {isDeafened ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-              <span className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-zinc-950 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none border border-zinc-800">
-                {isDeafened ? "Undeafen" : "Deafen"}
-              </span>
-            </button>
+            <div className="relative flex items-center">
+              <button
+                onClick={toggleDeafen}
+                className={`p-3 md:p-3.5 rounded-xl transition-all duration-200 group relative cursor-pointer ${
+                  isDeafened
+                    ? "bg-red-500/10 text-red-500 hover:bg-red-500/20"
+                    : "bg-zinc-800/50 text-zinc-400 hover:bg-zinc-700 hover:text-white"
+                }`}
+              >
+                {isDeafened ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                <span className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-zinc-950 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none border border-zinc-800">
+                  {isDeafened ? "Undeafen" : "Deafen"}
+                </span>
+              </button>
+              <button
+                onClick={() => setShowSpeakerMenu((prev) => !prev)}
+                className="ml-1 p-2 rounded-lg bg-zinc-800/50 text-zinc-400 hover:bg-zinc-700 hover:text-white transition-all"
+                aria-label="Select speaker"
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
+              {showSpeakerMenu && (
+                <div className="absolute bottom-full mb-3 left-0 w-56 rounded-2xl border border-zinc-800/60 bg-zinc-950/95 backdrop-blur-xl p-2 shadow-2xl z-[70]">
+                  <p className="px-2 py-1 text-[10px] uppercase tracking-wider text-zinc-500">Speaker</p>
+                  <div className="max-h-48 overflow-y-auto no-scrollbar">
+                    {availableSpeakers.length === 0 ? (
+                      <p className="px-2 py-2 text-xs text-zinc-500">No speakers found</p>
+                    ) : (
+                      availableSpeakers.map((speaker, index) => (
+                        <button
+                          key={speaker.deviceId}
+                          onClick={() => {
+                            void setSpeakerDevice(speaker.deviceId);
+                            setShowSpeakerMenu(false);
+                          }}
+                          className={`w-full text-left px-2 py-2 rounded-lg text-xs transition ${
+                            speaker.deviceId === selectedSpeakerId
+                              ? "bg-emerald-500/10 text-emerald-300"
+                              : "text-zinc-300 hover:bg-zinc-800/70"
+                          }`}
+                        >
+                          {speaker.label || `Speaker ${index + 1}`}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="w-px h-8 bg-zinc-800" />
 
@@ -1367,7 +1444,7 @@ export default function RoomVoiceChatPage() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 480, opacity: 0 }}
               transition={{ type: "spring", stiffness: 260, damping: 30 }}
-              className="fixed top-0 right-0 h-full w-full sm:w-[380px] md:w-[420px] bg-zinc-950/95 backdrop-blur-xl border-l border-zinc-800/60 z-[60] flex flex-col shadow-2xl ring-1 ring-white/5"
+              className="fixed top-0 right-0 h-full w-full sm:w-[380px] md:w-[420px] sm:min-w-[280px] sm:max-w-[90vw] sm:resize-x sm:overflow-hidden bg-zinc-950/95 backdrop-blur-xl border-l border-zinc-800/60 z-[60] flex flex-col shadow-2xl ring-1 ring-white/5"
             >
               <div className="px-5 py-4 border-b border-zinc-800/70 flex items-center justify-between bg-gradient-to-b from-zinc-950/90 to-transparent">
                 <div className="flex items-center gap-2.5">
@@ -1393,7 +1470,7 @@ export default function RoomVoiceChatPage() {
                 </button>
               </div>
 
-              <div ref={chatListRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              <div ref={chatListRef} className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar px-5 py-4 space-y-4">
                 {chatMessages.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center text-zinc-500 gap-3">
                     <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
@@ -1412,7 +1489,7 @@ export default function RoomVoiceChatPage() {
                         transition={{ duration: 0.18 }}
                         className={`flex ${isMine ? "justify-end" : "justify-start"}`}
                       >
-                        <div className={`max-w-[82%] rounded-2xl px-3.5 py-3 border shadow-sm ${
+                        <div className={`max-w-[82%] rounded-2xl px-3.5 py-3 border shadow-sm break-words ${
                           isMine
                             ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-50 shadow-emerald-500/10"
                             : "bg-zinc-900/70 border-zinc-800/60 text-zinc-100"
@@ -1436,7 +1513,9 @@ export default function RoomVoiceChatPage() {
                           </div>
 
                           {msg.content && (
-                            <p className="text-sm leading-relaxed text-zinc-100/90 whitespace-pre-wrap">{msg.content}</p>
+                            <p className="text-sm leading-relaxed text-zinc-100/90 whitespace-pre-wrap break-words">
+                              {msg.content}
+                            </p>
                           )}
 
                           {msg.attachments && msg.attachments.length > 0 && (
@@ -1532,20 +1611,38 @@ export default function RoomVoiceChatPage() {
                     />
                   </div>
 
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowEmojiPicker((prev) => !prev)}
+                      className="p-2.5 rounded-xl bg-zinc-800/70 text-zinc-400 hover:text-white hover:bg-zinc-700 transition"
+                      type="button"
+                    >
+                      <Smile className="w-4 h-4" />
+                    </button>
+                    {showEmojiPicker && (
+                      <div className="absolute bottom-12 right-0 z-20 w-48 rounded-2xl border border-zinc-800/70 bg-zinc-950/95 p-2 shadow-2xl">
+                        <div className="grid grid-cols-5 gap-1">
+                          {emojiOptions.map((emoji) => (
+                            <button
+                              key={emoji}
+                              onClick={() => handleAddEmoji(emoji)}
+                              className="rounded-lg p-1.5 text-lg hover:bg-zinc-800/70 transition"
+                              type="button"
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     className="p-2.5 rounded-xl bg-zinc-800/70 text-zinc-400 hover:text-white hover:bg-zinc-700 transition"
                     disabled={isUploading}
                   >
                     <Paperclip className="w-4 h-4" />
-                  </button>
-
-                  <button
-                    onClick={() => folderInputRef.current?.click()}
-                    className="p-2.5 rounded-xl bg-zinc-800/70 text-zinc-400 hover:text-white hover:bg-zinc-700 transition"
-                    disabled={isUploading}
-                  >
-                    <FolderIcon className="w-4 h-4" />
                   </button>
 
                   <button
@@ -1562,16 +1659,6 @@ export default function RoomVoiceChatPage() {
 
                 <input
                   ref={fileInputRef}
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => {
-                    addPendingFiles(e.target.files);
-                    e.currentTarget.value = "";
-                  }}
-                />
-                <input
-                  ref={folderInputRef}
                   type="file"
                   multiple
                   className="hidden"

@@ -24,6 +24,12 @@ interface RoomVoiceContextType {
   setParticipants: React.Dispatch<React.SetStateAction<RoomParticipant[]>>;
   isMuted: boolean;
   isDeafened: boolean;
+  availableMics: MediaDeviceInfo[];
+  availableSpeakers: MediaDeviceInfo[];
+  selectedMicId: string | null;
+  selectedSpeakerId: string | null;
+  switchMicDevice: (deviceId: string) => Promise<void>;
+  setSpeakerDevice: (deviceId: string) => Promise<void>;
   joinVoice: (roomId: string, roomName: string) => Promise<boolean>;
   leaveVoice: () => void;
   toggleMute: () => void;
@@ -44,6 +50,12 @@ const RoomVoiceContext = createContext<RoomVoiceContextType>({
   setParticipants: () => {},
   isMuted: false,
   isDeafened: false,
+  availableMics: [],
+  availableSpeakers: [],
+  selectedMicId: null,
+  selectedSpeakerId: null,
+  switchMicDevice: async () => {},
+  setSpeakerDevice: async () => {},
   joinVoice: async () => false,
   leaveVoice: () => {},
   toggleMute: () => {},
@@ -95,6 +107,10 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
   const [participants, setParticipants] = useState<RoomParticipant[]>([]);
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
+  const [availableMics, setAvailableMics] = useState<MediaDeviceInfo[]>([]);
+  const [availableSpeakers, setAvailableSpeakers] = useState<MediaDeviceInfo[]>([]);
+  const [selectedMicId, setSelectedMicId] = useState<string | null>(null);
+  const [selectedSpeakerId, setSelectedSpeakerId] = useState<string | null>(null);
 
   // ─── Stable refs for handler closures (avoid stale captures) ────
   const voiceRoomIdRef = useRef<string | null>(null);
@@ -103,6 +119,7 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
   const isMutedRef = useRef(false);
   const isDeafenedRef = useRef(false);
   const isVoiceConnectedRef = useRef(false);
+  const selectedSpeakerIdRef = useRef<string | null>(null);
 
   // Keep refs in sync
   useEffect(() => { userRef.current = user; }, [user]);
@@ -110,6 +127,7 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
   useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
   useEffect(() => { isDeafenedRef.current = isDeafened; }, [isDeafened]);
   useEffect(() => { isVoiceConnectedRef.current = isVoiceConnected; }, [isVoiceConnected]);
+  useEffect(() => { selectedSpeakerIdRef.current = selectedSpeakerId; }, [selectedSpeakerId]);
 
   // ─── Voice infrastructure refs ──────────────────────────────────
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -182,7 +200,68 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
     };
   }, []);
 
+  useEffect(() => {
+    void refreshDeviceLists();
+    const handler = () => {
+      void refreshDeviceLists();
+    };
+    navigator.mediaDevices?.addEventListener?.("devicechange", handler);
+    return () => {
+      navigator.mediaDevices?.removeEventListener?.("devicechange", handler);
+    };
+  }, []);
+
   // ═══════════════════════════════════════════════════════════════
+
+  const refreshDeviceLists = async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const mics = devices.filter((d) => d.kind === "audioinput");
+      const speakers = devices.filter((d) => d.kind === "audiooutput");
+      setAvailableMics(mics);
+      setAvailableSpeakers(speakers);
+
+      if (mics.length > 0) {
+        const hasSelected = selectedMicId && mics.some((d) => d.deviceId === selectedMicId);
+        if (!hasSelected) setSelectedMicId(mics[0].deviceId);
+      }
+
+      if (speakers.length > 0) {
+        const hasSelected = selectedSpeakerId && speakers.some((d) => d.deviceId === selectedSpeakerId);
+        if (!hasSelected) {
+          const defaultSpeaker = speakers.find((d) => d.deviceId === "default")?.deviceId || speakers[0].deviceId;
+          setSelectedSpeakerId(defaultSpeaker);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to enumerate devices:", err);
+    }
+  };
+
+  const applySpeakerToAudio = async (audioEl: HTMLAudioElement, deviceId: string) => {
+    const sinkCapable = (audioEl as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }).setSinkId;
+    if (typeof sinkCapable !== "function") return;
+    try {
+      await (audioEl as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> }).setSinkId(deviceId);
+    } catch (err) {
+      console.error("Failed to set speaker device:", err);
+    }
+  };
+
+  const setSpeakerDevice = async (deviceId: string) => {
+    setSelectedSpeakerId(deviceId);
+    const audios = Array.from(audioRefs.current.values());
+    await Promise.all(audios.map((audio) => applySpeakerToAudio(audio, deviceId)));
+  };
+
+  useEffect(() => {
+    if (!selectedSpeakerId) return;
+    const audios = Array.from(audioRefs.current.values());
+    audios.forEach((audio) => {
+      applySpeakerToAudio(audio, selectedSpeakerId).catch(() => {});
+    });
+  }, [selectedSpeakerId]);
   //  Cleanup (must be declared before effects that use it)
   // ═══════════════════════════════════════════════════════════════
 
@@ -292,15 +371,46 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
   const setupLocalAudio = async (): Promise<MediaStream | null> => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: {
+          deviceId: selectedMicId ? { exact: selectedMicId } : undefined,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
       });
       localStreamRef.current = stream;
       setupLocalAudioAnalyzer(stream);
+      void refreshDeviceLists();
       return stream;
     } catch (error) {
       console.error("Failed to get audio stream:", error);
       toast.error("Please enable microphone access to join voice chat");
       return null;
+    }
+  };
+
+  const switchMicDevice = async (deviceId: string) => {
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        audio: { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      const newTrack = newStream.getAudioTracks()[0];
+      if (!newTrack) return;
+      newTrack.enabled = !isMutedRef.current;
+
+      peerConnectionsRef.current.forEach((pc) => {
+        const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
+        if (sender) sender.replaceTrack(newTrack).catch(() => {});
+      });
+
+      const prev = localStreamRef.current;
+      if (prev) prev.getAudioTracks().forEach((t) => t.stop());
+      localStreamRef.current = newStream;
+      setupLocalAudioAnalyzer(newStream);
+      setSelectedMicId(deviceId);
+    } catch (err) {
+      console.error("Failed to switch microphone:", err);
+      toast.error("Failed to switch microphone");
     }
   };
 
@@ -444,6 +554,10 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
           audioRefs.current.set(targetUserId, audio);
           audio.style.display = "none";
           document.body.appendChild(audio);
+        }
+        const speakerId = selectedSpeakerIdRef.current;
+        if (speakerId) {
+          applySpeakerToAudio(audio, speakerId).catch(() => {});
         }
         audio.srcObject = remoteStream;
         if (isDeafenedRef.current) audio.muted = true;
@@ -808,6 +922,12 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
         setParticipants,
         isMuted,
         isDeafened,
+        availableMics,
+        availableSpeakers,
+        selectedMicId,
+        selectedSpeakerId,
+        switchMicDevice,
+        setSpeakerDevice,
         joinVoice,
         leaveVoice,
         toggleMute,

@@ -76,7 +76,7 @@ export async function POST(req: Request) {
 
     const sessionToken = makeToken();
     const tokenHash = hashValue(sessionToken);
-    const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     console.log(`[OTP_VERIFY] Creating session for user ${user.email}, expires at ${expiresAt.toISOString()}`);
 

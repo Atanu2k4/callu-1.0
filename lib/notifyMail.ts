@@ -2,6 +2,7 @@ import { Resend } from "resend";
 
 export type NotifyMailParams = {
   to: string;
+  bcc?: string;
   subject: string;
   text: string;
   html: string;
@@ -17,7 +18,7 @@ const isValidEmail = (email: string): boolean => {
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const sendNotifyMail = async (
-  { to, subject, text, html }: NotifyMailParams,
+  { to, bcc, subject, text, html }: NotifyMailParams,
   maxRetries = 3
 ) => {
   const { RESEND_API_KEY, RESEND_FROM_EMAIL } = process.env;
@@ -38,6 +39,11 @@ export const sendNotifyMail = async (
     throw new Error(`Invalid email address: ${to}`);
   }
 
+  if (bcc && !isValidEmail(bcc)) {
+    console.warn(`[Email] Invalid BCC email: ${bcc}`);
+    throw new Error(`Invalid BCC email address: ${bcc}`);
+  }
+
   console.log(`[Email] Config check: FROM=${RESEND_FROM_EMAIL}, TO=${to}, KEY_PREFIX=${RESEND_API_KEY.substring(0, 10)}...`);
 
   let lastError: any;
@@ -49,6 +55,7 @@ export const sendNotifyMail = async (
       const response = await resend.emails.send({
         from: RESEND_FROM_EMAIL,
         to,
+        bcc,
         subject,
         text,
         html,
