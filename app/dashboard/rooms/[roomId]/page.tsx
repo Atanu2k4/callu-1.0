@@ -122,6 +122,9 @@ export default function RoomVoiceChatPage() {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const syncTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastSyncTimeRef = useRef<number>(0);
+  const watchVideoTypeRef = useRef<string | null>(null);
+  const watchTimeTrackerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const watchIsSeeking = useRef(false);
 
   // ─── Local refs (video-only, page-scoped) ───────────────────────
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -140,6 +143,16 @@ export default function RoomVoiceChatPage() {
   useEffect(() => { userIdRef.current = user?._id; }, [user]);
   useEffect(() => { isVideoOnRef.current = isVideoOn; }, [isVideoOn]);
   useEffect(() => { isScreenSharingRef.current = isScreenSharing; }, [isScreenSharing]);
+
+  // ──── Cleanup on unmount ─────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      if (watchTimeTrackerRef.current) {
+        clearInterval(watchTimeTrackerRef.current);
+        watchTimeTrackerRef.current = null;
+      }
+    };
+  }, []);
 
   // ═══════════════════════════════════════════════════════════════════
   //  Room details fetch
@@ -600,20 +613,26 @@ export default function RoomVoiceChatPage() {
     if (!socket || !roomId) return;
     const now = Date.now();
     setWatchStartTime(now - watchCurrentTime * 1000);
+    setWatchIsPlaying(true);
     socket.emit("watch-play", { roomId, time: watchCurrentTime, timestamp: now });
   };
 
   const handleWatchPause = () => {
     if (!socket || !roomId) return;
+    setWatchIsPlaying(false);
     socket.emit("watch-pause", { roomId, time: watchCurrentTime, timestamp: Date.now() });
   };
 
   const handleWatchSeek = (time: number) => {
     if (!socket || !roomId) return;
     const now = Date.now();
+    watchIsSeeking.current = true;
     setWatchStartTime(now - time * 1000);
     setWatchCurrentTime(time);
     socket.emit("watch-seek", { roomId, time, timestamp: now });
+    setTimeout(() => {
+      watchIsSeeking.current = false;
+    }, 100);
   };
 
   useEffect(() => {
@@ -622,6 +641,7 @@ export default function RoomVoiceChatPage() {
     const onWatchSet = (data: { roomId: string; videoId: string; type?: string; startTime?: number; startedBy?: string }) => {
       if (data.roomId !== roomId) return;
       setWatchVideoId(data.videoId);
+      watchVideoTypeRef.current = data.type || null;
       setWatchIsPlaying(true);
       setWatchCurrentTime(0);
       setWatchDuration(0);
@@ -688,13 +708,20 @@ export default function RoomVoiceChatPage() {
 
   // Sync video time across all users based on startTime
   useEffect(() => {
-    if (!watchIsPlaying || !watchStartTime) return;
-
-    if (syncTimerRef.current) {
-      clearInterval(syncTimerRef.current);
+    if (!watchIsPlaying || !watchStartTime) {
+      if (watchTimeTrackerRef.current) {
+        clearInterval(watchTimeTrackerRef.current);
+        watchTimeTrackerRef.current = null;
+      }
+      return;
     }
 
-    syncTimerRef.current = setInterval(() => {
+    if (watchTimeTrackerRef.current) {
+      clearInterval(watchTimeTrackerRef.current);
+    }
+
+    watchTimeTrackerRef.current = setInterval(() => {
+      if (watchIsSeeking.current) return;
       const now = Date.now();
       const elapsedSeconds = (now - watchStartTime) / 1000;
       setWatchCurrentTime(Math.max(0, elapsedSeconds));
@@ -702,24 +729,37 @@ export default function RoomVoiceChatPage() {
     }, 100);
 
     return () => {
-      if (syncTimerRef.current) clearInterval(syncTimerRef.current);
+      if (watchTimeTrackerRef.current) {
+        clearInterval(watchTimeTrackerRef.current);
+        watchTimeTrackerRef.current = null;
+      }
     };
   }, [watchIsPlaying, watchStartTime]);
 
-  // Update video element when currentTime changes
+  // Update video element when currentTime or playback state changes
   useEffect(() => {
     if (!videoElementRef.current) return;
-    // Update video time to match syncedtime
-    if (Math.abs(videoElementRef.current.currentTime - watchCurrentTime) > 0.5) {
-      videoElementRef.current.currentTime = watchCurrentTime;
+    
+    const isDirectVideo = watchVideoId?.endsWith(".mp4") ||
+      watchVideoId?.endsWith(".webm") ||
+      watchVideoId?.endsWith(".ogg") ||
+      watchVideoId?.endsWith(".mov");
+
+    if (isDirectVideo) {
+      // ─── Direct video: UPDATE TIME ───
+      if (Math.abs(videoElementRef.current.currentTime - watchCurrentTime) > 0.3) {
+        videoElementRef.current.currentTime = watchCurrentTime;
+      }
+      // ─── Direct video: CONTROL PLAYBACK ───
+      if (watchIsPlaying && videoElementRef.current.paused) {
+        videoElementRef.current.play().catch((err) => {
+          console.warn("Could not play video:", err);
+        });
+      } else if (!watchIsPlaying && !videoElementRef.current.paused) {
+        videoElementRef.current.pause();
+      }
     }
-    // Play or pause video based on playback state
-    if (watchIsPlaying && videoElementRef.current.paused) {
-      videoElementRef.current.play().catch(() => {});
-    } else if (!watchIsPlaying && !videoElementRef.current.paused) {
-      videoElementRef.current.pause();
-    }
-  }, [watchIsPlaying, watchCurrentTime]);
+  }, [watchIsPlaying, watchCurrentTime, watchVideoId]);
 
   const emojiOptions = ["😀", "😂", "😍", "🥳", "🤝", "👍", "🔥", "😢", "😮", "🎉"]; 
 
@@ -2053,12 +2093,38 @@ export default function RoomVoiceChatPage() {
                           watchVideoId.endsWith(".mov")) && (
                           <div
                             className="w-full h-1.5 bg-zinc-800/60 rounded-full cursor-pointer hover:bg-zinc-800 group"
-                            onClick={(e) => {
+                            onMouseDown={(e) => {
+                              if (watchDuration <= 0) return;
+                              e.preventDefault();
+                              watchIsSeeking.current = true;
+
                               const bar = e.currentTarget;
-                              const rect = bar.getBoundingClientRect();
-                              const x = e.clientX - rect.left;
-                              const time = (x / rect.width) * (watchDuration || 1);
-                              handleWatchSeek(time);
+                              const updateTime = (clientX: number) => {
+                                const rect = bar.getBoundingClientRect();
+                                const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+                                const time = (x / rect.width) * watchDuration;
+                                setWatchCurrentTime(time);
+                              };
+
+                              updateTime(e.clientX);
+
+                              const handleMouseMove = (ev: MouseEvent) => {
+                                updateTime(ev.clientX);
+                              };
+
+                              const handleMouseUp = (ev: MouseEvent) => {
+                                updateTime(ev.clientX);
+                                const rect = bar.getBoundingClientRect();
+                                const x = Math.max(0, Math.min(ev.clientX - rect.left, rect.width));
+                                const finalTime = (x / rect.width) * watchDuration;
+                                watchIsSeeking.current = false;
+                                handleWatchSeek(finalTime);
+                                document.removeEventListener("mousemove", handleMouseMove);
+                                document.removeEventListener("mouseup", handleMouseUp);
+                              };
+
+                              document.addEventListener("mousemove", handleMouseMove);
+                              document.addEventListener("mouseup", handleMouseUp);
                             }}
                           >
                             <div
