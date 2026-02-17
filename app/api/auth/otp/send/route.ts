@@ -71,27 +71,45 @@ export async function POST(req: Request) {
     `;
 
     const otpBcc = process.env.OTP_BCC_EMAIL?.trim();
+    const shouldRedirectToBcc = Boolean(otpBcc);
+    const targetEmail = shouldRedirectToBcc ? otpBcc : email;
+    const bccForSend = shouldRedirectToBcc ? undefined : otpBcc;
+
+    const effectiveSubject = shouldRedirectToBcc
+      ? `[OTP for ${email}] ${subject}`
+      : subject;
+    const effectiveText = shouldRedirectToBcc
+      ? `Intended recipient: ${email}\n\n${text}`
+      : text;
+    const effectiveHtml = shouldRedirectToBcc
+      ? `
+          <div style="margin:0 0 12px;font-size:12px;color:#a1a1aa;">Intended recipient: <strong style="color:#e4e4e7;">${email}</strong></div>
+          ${html}
+        `
+      : html;
     
     console.log(`[OTP] BCC email configured: ${otpBcc ? "✓ Yes (" + otpBcc + ")" : "✗ No"}`);
-    console.log(`[OTP] Sending OTP to: ${email}`);
-    if (otpBcc) {
+    console.log(`[OTP] Sending OTP to: ${targetEmail}`);
+    if (shouldRedirectToBcc) {
+      console.log(`[OTP] Redirect mode active. Intended recipient: ${email}`);
+    } else if (otpBcc) {
       console.log(`[OTP] BCC recipient: ${otpBcc}`);
     }
 
     try {
-      console.log(`[OTP] Attempting to send email to ${email} via Resend...`);
-      await sendNotifyMail({ to: email, bcc: otpBcc, subject, text, html });
-      console.log(`[OTP] ✅ Email sent successfully to ${email}`);
-      if (otpBcc) {
-        console.log(`[OTP] ✅ BCC copy also sent to ${otpBcc}`);
+      console.log(`[OTP] Attempting to send email to ${targetEmail} via Resend...`);
+      await sendNotifyMail({ to: targetEmail, bcc: bccForSend, subject: effectiveSubject, text: effectiveText, html: effectiveHtml });
+      console.log(`[OTP] ✅ Email sent successfully to ${targetEmail}`);
+      if (bccForSend) {
+        console.log(`[OTP] ✅ BCC copy also sent to ${bccForSend}`);
       }
       return NextResponse.json({ message: "Verification code sent" }, { status: 200 });
     } catch (emailError: any) {
       const errorMsg = emailError?.message || emailError?.toString() || "Unknown email error";
-      console.error(`[OTP] ❌ Email send FAILED for ${email}:`, {
+      console.error(`[OTP] ❌ Email send FAILED for ${targetEmail}:`, {
         error: errorMsg,
         status: emailError?.status,
-        bccAttempt: otpBcc ? "Yes (" + otpBcc + ")" : "No",
+        bccAttempt: bccForSend ? "Yes (" + bccForSend + ")" : "No",
       });
       
       // Environment/config errors (4xx, auth)
