@@ -809,7 +809,11 @@ export default function RoomVoiceChatPage() {
       // ─── Turn camera ON ─────────────────────────────────
       try {
         const cameraStream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: {
+            width: { min: 640, ideal: 1920, max: 1920 },
+            height: { min: 480, ideal: 1080, max: 1080 },
+            frameRate: { ideal: 30, max: 60 }, // 30 FPS standard, up to 60 FPS peak
+          },
         });
         const videoTrack = cameraStream.getVideoTracks()[0];
         if (!videoTrack) return;
@@ -871,7 +875,10 @@ export default function RoomVoiceChatPage() {
       // ─── START screen sharing ───────────────────────────
       try {
         const screenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: { cursor: "always" } as MediaTrackConstraints,
+          video: {
+            cursor: "always",
+            frameRate: { ideal: 30, max: 60 }, // Higher FPS for smoother screen sharing
+          } as MediaTrackConstraints,
           audio: true,
           systemAudio: "include",
         } as DisplayMediaStreamOptions);

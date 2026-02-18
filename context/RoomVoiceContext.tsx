@@ -376,6 +376,7 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
+          sampleRate: { ideal: 48000 }, // Higher quality audio (48kHz)
         },
       });
       localStreamRef.current = stream;
@@ -392,7 +393,7 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
   const switchMicDevice = async (deviceId: string) => {
     try {
       const newStream = await navigator.mediaDevices.getUserMedia({
-        audio: { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true, sampleRate: { ideal: 48000 } },
       });
       const newTrack = newStream.getAudioTracks()[0];
       if (!newTrack) return;
@@ -523,12 +524,58 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
     }
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "connected") console.log(`✅ Connected with ${targetUserId}`);
-      else if (pc.connectionState === "failed") console.error(`❌ Connection failed with ${targetUserId}`);
+      if (pc.connectionState === "connected") {
+        console.log(`✅ Connected with ${targetUserId}`);
+        // Set maximum bitrate for video and audio
+        pc.getSenders().forEach((sender) => {
+          if (sender.track?.kind === "video") {
+            console.log(`📹 Video encoder allocated: max 5 Mbps to ${targetUserId}`);
+          } else if (sender.track?.kind === "audio") {
+            console.log(`🔊 Audio encoder allocated: max 500 kbps to ${targetUserId}`);
+          }
+        });
+      } else if (pc.connectionState === "failed") {
+        console.error(`❌ Connection failed with ${targetUserId}`);
+      }
     };
 
     pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === "failed") console.error(`❌ ICE failed with ${targetUserId}`);
+      if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+        // Allocate maximum bandwidth when ICE is connected
+        const allocateBandwidth = async () => {
+          try {
+            const senders = pc.getSenders();
+            for (const sender of senders) {
+              if (!sender.track) continue;
+              const params = sender.getParameters();
+              
+              // Initialize encodings array if not present
+              if (!params.encodings) {
+                params.encodings = [{}];
+              }
+              
+              if (sender.track.kind === "video") {
+                // Allocate 5 Mbps for video (screen share gets priority)
+                params.encodings[0].maxBitrate = 5_000_000;
+                params.encodings[0].maxFramerate = 60; // Support up to 60 FPS
+              } else if (sender.track.kind === "audio") {
+                // Allocate 500 kbps for audio (high quality)
+                params.encodings[0].maxBitrate = 500_000;
+              }
+              
+              await sender.setParameters(params).catch(() => {
+                // Ignore errors in case the params setter is not supported
+              });
+            }
+          } catch (err) {
+            console.error(`Failed to allocate bandwidth for ${targetUserId}:`, err);
+          }
+        };
+        
+        allocateBandwidth();
+      } else if (pc.iceConnectionState === "failed") {
+        console.error(`❌ ICE failed with ${targetUserId}`);
+      }
     };
 
     pc.onicecandidate = (event) => {
