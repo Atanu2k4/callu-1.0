@@ -14,6 +14,7 @@ export interface RoomParticipant {
   isSpeaking: boolean;
   isVideoOn: boolean;
   isScreenSharing: boolean;
+  isMuted?: boolean;
 }
 
 interface RoomVoiceContextType {
@@ -731,6 +732,7 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
             isSpeaking: false,
             isVideoOn: false,
             isScreenSharing: false,
+            isMuted: isMutedRef.current,
           },
         ];
     setParticipants(allParticipants);
@@ -755,6 +757,7 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
         isSpeaking: false,
         isVideoOn: false,
         isScreenSharing: false,
+        isMuted: false,
       }];
     });
 
@@ -817,6 +820,9 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
     const onScreenShare = (data: { userId: string; isSharing: boolean }) => {
       setParticipants(prev => prev.map(p => p.userId === data.userId ? { ...p, isScreenSharing: data.isSharing } : p));
     };
+    const onMuteToggle = (data: { userId: string; isMuted: boolean }) => {
+      setParticipants(prev => prev.map(p => p.userId === data.userId ? { ...p, isMuted: data.isMuted } : p));
+    };
 
     const listeners: Record<string, (...args: any[]) => void> = {
       "room-user-joined": handleUserJoinedImpl,
@@ -826,6 +832,7 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
       "user-speaking": handleUserSpeakingImpl,
       "room-video-toggle": onVideoToggle,
       "room-screen-share": onScreenShare,
+      "room-mute-toggle": onMuteToggle,
     };
 
     Object.entries(listeners).forEach(([event, handler]) => {
@@ -948,6 +955,19 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
         track.enabled = !newMuted;
       });
       setIsMuted(newMuted);
+
+      // Broadcast mute state to other participants
+      const s = socketRef.current;
+      const u = userRef.current;
+      const rid = voiceRoomIdRef.current;
+      if (s && u && rid) {
+        s.emit("room-mute-toggle", { roomId: rid, userId: u._id, isMuted: newMuted });
+      }
+
+      // Update own participant entry
+      if (u) {
+        setParticipants(prev => prev.map(p => p.userId === u._id ? { ...p, isMuted: newMuted } : p));
+      }
     }
   };
 

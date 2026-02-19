@@ -55,7 +55,7 @@ connectDB().then(() => {
   // Store connected users (socketId -> userId)
   // In a real app, use Redis. For this MVP, in-memory is fine.
   const onlineUsers = new Map<string, string>(); // userId -> socketId
-  const roomParticipants = new Map<string, Map<string, { name: string; avatar: string | null; color: string; isVideoOn: boolean; isScreenSharing: boolean }>>(); // roomId -> Map of userId -> profile
+  const roomParticipants = new Map<string, Map<string, { name: string; avatar: string | null; color: string; isVideoOn: boolean; isScreenSharing: boolean; isMuted: boolean }>>(); // roomId -> Map of userId -> profile
   const userSockets = new Map<string, string>(); // userId -> socketId for rooms
   const roomChatMessages = new Map<string, Array<{
     id: string;
@@ -186,7 +186,7 @@ connectDB().then(() => {
       if (!roomParticipants.has(roomId)) {
         roomParticipants.set(roomId, new Map());
       }
-      roomParticipants.get(roomId)!.set(userId, { name: userName, avatar, color, isVideoOn: false, isScreenSharing: false });
+      roomParticipants.get(roomId)!.set(userId, { name: userName, avatar, color, isVideoOn: false, isScreenSharing: false, isMuted: false });
       
       // Notify others in the room
       socket.to(roomId).emit("room-user-joined", { userId, userName, avatar, color });
@@ -200,6 +200,7 @@ connectDB().then(() => {
         isSpeaking: false,
         isVideoOn: profile.isVideoOn,
         isScreenSharing: profile.isScreenSharing,
+        isMuted: profile.isMuted ?? false,
       }));
       socket.emit("room-participants", { participants });
       const history = roomChatMessages.get(roomId) || [];
@@ -267,6 +268,16 @@ connectDB().then(() => {
         profile.isScreenSharing = isSharing;
       }
       socket.to(roomId).emit("room-screen-share", { userId, isSharing });
+    });
+
+    socket.on("room-mute-toggle", (data: { roomId: string; userId: string; isMuted: boolean }) => {
+      const { roomId, userId, isMuted } = data;
+      const participants = roomParticipants.get(roomId);
+      if (participants && participants.has(userId)) {
+        const profile = participants.get(userId)!;
+        profile.isMuted = isMuted;
+      }
+      socket.to(roomId).emit("room-mute-toggle", { userId, isMuted });
     });
 
     socket.on("room-chat-history-request", (data: { roomId: string }) => {

@@ -128,6 +128,11 @@ export default function RoomVoiceChatPage() {
   const watchIsSeeking = useRef(false);
   const spotlightVideoRef = useRef<HTMLVideoElement | null>(null);
   const spotlightContainerRef = useRef<HTMLDivElement | null>(null);
+  const autoPiPRef = useRef(false);
+  const canvasPiPVideoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasAnimFrameRef = useRef<number | null>(null);
+  const pipImgCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const participantsRef = useRef(participants);
 
   // ─── Local refs (video-only, page-scoped) ───────────────────────
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -146,6 +151,7 @@ export default function RoomVoiceChatPage() {
   useEffect(() => { userIdRef.current = user?._id; }, [user]);
   useEffect(() => { isVideoOnRef.current = isVideoOn; }, [isVideoOn]);
   useEffect(() => { isScreenSharingRef.current = isScreenSharing; }, [isScreenSharing]);
+  useEffect(() => { participantsRef.current = participants; }, [participants]);
 
   // ─── Cleanup on unmount ─────────────────────────────────────────
   useEffect(() => {
@@ -171,6 +177,233 @@ export default function RoomVoiceChatPage() {
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     return () => {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  // ─── Auto PiP when browser is minimized / tab hidden ─────────────
+  useEffect(() => {
+    // ── helpers ──────────────────────────────────────────────────
+    const stopCanvasAnim = () => {
+      if (canvasAnimFrameRef.current !== null) {
+        cancelAnimationFrame(canvasAnimFrameRef.current);
+        canvasAnimFrameRef.current = null;
+      }
+    };
+
+    // Draw one frame of participant info onto the canvas
+    const drawFrame = (canvas: HTMLCanvasElement) => {
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const W = canvas.width;
+      const H = canvas.height;
+      const parts = participantsRef.current;
+
+      // Background
+      ctx.fillStyle = "#18181b";
+      ctx.fillRect(0, 0, W, H);
+
+      const visible = parts.slice(0, 4);
+
+      if (visible.length > 0) {
+        // Preload avatar images
+        visible.forEach((p) => {
+          if (p.avatar && !pipImgCacheRef.current.has(p.avatar)) {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.src = p.avatar;
+            pipImgCacheRef.current.set(p.avatar, img);
+          }
+        });
+
+        const cols = visible.length <= 1 ? 1 : 2;
+        const rows = Math.ceil(visible.length / cols);
+        const cellW = W / cols;
+        const cellH = H / rows;
+        const R = Math.min(cellW, cellH) * 0.23;
+
+        visible.forEach((p, i) => {
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          const cx = cellW * col + cellW / 2;
+          const cy = cellH * row + cellH / 2 - 14;
+
+          // Cell background
+          ctx.fillStyle = p.isSpeaking ? "rgba(16,185,129,0.07)" : "rgba(39,39,42,0.5)";
+          if ((ctx as any).roundRect) {
+            ctx.beginPath();
+            (ctx as any).roundRect(cellW * col + 4, cellH * row + 4, cellW - 8, cellH - 8, 10);
+            ctx.fill();
+          } else {
+            ctx.fillRect(cellW * col + 4, cellH * row + 4, cellW - 8, cellH - 8);
+          }
+
+          // Speaking glow ring
+          if (p.isSpeaking) {
+            ctx.beginPath();
+            ctx.arc(cx, cy, R + 7, 0, Math.PI * 2);
+            ctx.strokeStyle = "rgba(16,185,129,0.35)";
+            ctx.lineWidth = 6;
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(cx, cy, R + 4, 0, Math.PI * 2);
+            ctx.strokeStyle = "#10b981";
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+          }
+
+          // Avatar circle fill
+          ctx.beginPath();
+          ctx.arc(cx, cy, R, 0, Math.PI * 2);
+          ctx.fillStyle = p.color || "#27272a";
+          ctx.fill();
+
+          // Avatar image or initial letter
+          const img = p.avatar ? pipImgCacheRef.current.get(p.avatar) : null;
+          if (img && img.complete && img.naturalWidth > 0) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(cx, cy, R, 0, Math.PI * 2);
+            ctx.clip();
+            ctx.drawImage(img, cx - R, cy - R, R * 2, R * 2);
+            ctx.restore();
+          } else {
+            ctx.fillStyle = "rgba(255,255,255,0.85)";
+            ctx.font = `bold ${Math.round(R * 0.75)}px system-ui,sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(p.name?.[0]?.toUpperCase() || "U", cx, cy);
+          }
+
+          // Muted badge — red circle at top-right of avatar
+          if (p.isMuted) {
+            const bx = cx + R * 0.66;
+            const by = cy - R * 0.66;
+            const br = R * 0.24;
+            ctx.beginPath();
+            ctx.arc(bx, by, br, 0, Math.PI * 2);
+            ctx.fillStyle = "#ef4444";
+            ctx.fill();
+            // Simple mic-slash lines
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(bx - br * 0.5, by - br * 0.5);
+            ctx.lineTo(bx + br * 0.5, by + br * 0.5);
+            ctx.stroke();
+          }
+
+          // Name label
+          const fontSize = Math.max(11, Math.min(14, Math.round(cellW / 13)));
+          ctx.font = `${fontSize}px system-ui,sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          let name = p.name || "User";
+          const maxNameW = cellW - 20;
+          while (ctx.measureText(name).width > maxNameW && name.length > 1) {
+            name = name.slice(0, -1);
+          }
+          if (name !== p.name) name += "\u2026";
+          ctx.fillStyle = "rgba(255,255,255,0.88)";
+          ctx.fillText(name, cx, cy + R + 7);
+        });
+
+        // Overflow label
+        if (parts.length > 4) {
+          ctx.font = "11px system-ui,sans-serif";
+          ctx.textAlign = "right";
+          ctx.textBaseline = "top";
+          ctx.fillStyle = "rgba(255,255,255,0.45)";
+          ctx.fillText(`+${parts.length - 4} more`, W - 8, 8);
+        }
+      }
+
+      canvasAnimFrameRef.current = requestAnimationFrame(() => drawFrame(canvas));
+    };
+
+    // ── enter PiP ────────────────────────────────────────────────
+    const startPiP = async () => {
+      if (!document.pictureInPictureEnabled || document.pictureInPictureElement) return;
+
+      // Prefer a real video stream if one exists
+      if (isVideoOnRef.current && localVideoElRef.current?.srcObject) {
+        try {
+          await localVideoElRef.current.requestPictureInPicture();
+          autoPiPRef.current = true;
+          setIsInPiP(true);
+        } catch {}
+        return;
+      }
+      for (const el of videoElementsRef.current.values()) {
+        if (el?.srcObject) {
+          try {
+            await el.requestPictureInPicture();
+            autoPiPRef.current = true;
+            setIsInPiP(true);
+          } catch {}
+          return;
+        }
+      }
+
+      // No real video — build canvas PiP (voice-only mode, like Google Meet)
+      const pipVideoEl = canvasPiPVideoRef.current;
+      if (!pipVideoEl) return;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 480;
+      canvas.height = 270;
+
+      stopCanvasAnim();
+      drawFrame(canvas);
+
+      const stream = (canvas as any).captureStream(24) as MediaStream;
+      pipVideoEl.srcObject = stream;
+
+      try {
+        await pipVideoEl.play();
+        // Small wait so metadata is ready
+        await new Promise<void>((res) => {
+          if (pipVideoEl.readyState >= 1) { res(); return; }
+          pipVideoEl.addEventListener("loadedmetadata", () => res(), { once: true });
+          setTimeout(res, 600);
+        });
+        await pipVideoEl.requestPictureInPicture();
+        autoPiPRef.current = true;
+        setIsInPiP(true);
+      } catch (err) {
+        console.error("Canvas PiP failed:", err);
+        stopCanvasAnim();
+        pipVideoEl.pause();
+        pipVideoEl.srcObject = null;
+      }
+    };
+
+    // ── exit PiP ─────────────────────────────────────────────────
+    const stopPiP = async () => {
+      stopCanvasAnim();
+      if (autoPiPRef.current && document.pictureInPictureElement) {
+        try { await document.exitPictureInPicture(); } catch {}
+      }
+      autoPiPRef.current = false;
+      setIsInPiP(false);
+      const pipVideoEl = canvasPiPVideoRef.current;
+      if (pipVideoEl) {
+        pipVideoEl.pause();
+        pipVideoEl.srcObject = null;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        void startPiP();
+      } else {
+        void stopPiP();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      stopCanvasAnim();
     };
   }, []);
 
@@ -1332,6 +1565,12 @@ export default function RoomVoiceChatPage() {
                     {sp.isSpeaking && (
                       <div className="absolute inset-0 rounded-3xl border-2 border-emerald-500/50 z-30 pointer-events-none" />
                     )}
+                    {/* Mute badge */}
+                    {sp.isMuted && (
+                      <div className="absolute top-3 right-3 z-30 w-8 h-8 rounded-full bg-zinc-700/80 backdrop-blur-sm flex items-center justify-center">
+                        <MicOff className="w-4 h-4 text-red-400" />
+                      </div>
+                    )}
                   </>
                 );
               })()}
@@ -1393,6 +1632,11 @@ export default function RoomVoiceChatPage() {
                       {p.isScreenSharing && (
                         <div className="absolute top-1 right-1 bg-emerald-500/20 rounded p-0.5">
                           <MonitorUp className="w-2.5 h-2.5 text-emerald-400" />
+                        </div>
+                      )}
+                      {p.isMuted && (
+                        <div className="absolute top-1 left-1 w-5 h-5 rounded-full bg-zinc-700/80 flex items-center justify-center">
+                          <MicOff className="w-2.5 h-2.5 text-red-400" />
                         </div>
                       )}
                     </div>
@@ -1499,6 +1743,12 @@ export default function RoomVoiceChatPage() {
                   {/* Speaking border (both modes) */}
                   {participant.isSpeaking && (
                     <div className="absolute inset-0 rounded-3xl border-2 border-emerald-500/50 shadow-[inset_0_0_20px_rgba(16,185,129,0.2)] z-30 pointer-events-none" />
+                  )}
+                  {/* Mute badge */}
+                  {participant.isMuted && (
+                    <div className="absolute top-2 right-2 z-40 w-7 h-7 rounded-full bg-zinc-700/80 backdrop-blur-sm flex items-center justify-center">
+                      <MicOff className="w-3.5 h-3.5 text-red-400" />
+                    </div>
                   )}
                 </motion.div>
               ))}
@@ -2301,6 +2551,15 @@ export default function RoomVoiceChatPage() {
       </AnimatePresence>
 
       {/* Music Player Panel – now rendered persistently in dashboard layout */}
+
+      {/* Hidden video element used by canvas-based Picture-in-Picture (voice-only mode) */}
+      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+      <video
+        ref={canvasPiPVideoRef}
+        muted
+        playsInline
+        style={{ position: "fixed", width: 1, height: 1, opacity: 0, pointerEvents: "none", top: 0, left: 0, zIndex: -1 }}
+      />
 
       <style jsx global>{`
         @keyframes music-bar {
