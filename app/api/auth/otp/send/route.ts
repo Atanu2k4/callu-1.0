@@ -22,16 +22,40 @@ export async function POST(req: Request) {
     }
 
     await dbConnect();
-    const user = await User.findOne({ email });
+    let user = await User.findOne({ email });
 
     if (!user) {
-      console.warn(`[OTP] User not found for email: ${email}`);
-      return NextResponse.json({ message: "User not found" }, { status: 404 });
-    }
+      console.log(`[OTP] User not found, auto-creating new user for ${email}`);
+      const avatarFolders = ['3d', 'bluey', 'memo', 'notion', 'teams', 'toons', 'upstream', 'vibrant'];
+      const avatarCounts: { [key: string]: number } = {
+        '3d': 5,
+        'bluey': 10,
+        'memo': 20,
+        'notion': 10,
+        'teams': 5,
+        'toons': 7,
+        'upstream': 5,
+        'vibrant': 20
+      };
+      
+      const randomFolder = avatarFolders[Math.floor(Math.random() * avatarFolders.length)];
+      const randomImageNum = Math.floor(Math.random() * avatarCounts[randomFolder]) + 1;
+      const avatarPath = `/avatars/${randomFolder}/${randomImageNum}.png`;
 
-    if (user.status !== "approved") {
-      console.warn(`[OTP] User not approved: ${email}, status: ${user.status}`);
-      return NextResponse.json({ message: "Your application is still pending review." }, { status: 403 });
+      user = await User.create({
+        name: email.split("@")[0],
+        email,
+        mobile: `MOCK_${Date.now()}`,
+        status: 'approved',
+        avatarConfig: {
+          image: avatarPath,
+          color: ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500'][Math.floor(Math.random() * 4)]
+        }
+      });
+    } else if (user.status !== "approved") {
+      console.log(`[OTP] Auto-approving existing user ${email}`);
+      user.status = "approved";
+      await user.save();
     }
 
     const code = makeCode();
