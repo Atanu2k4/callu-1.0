@@ -143,19 +143,30 @@ export default function RoomVoiceChatPage() {
     };
   }, []);
 
-  // ─── Listen for fullscreen changes ───────────────────────────────
+  // ─── Listen for fullscreen changes & Escape key ──────────────────
   useEffect(() => {
     const handleFullscreenChange = () => {
-      if (!document.fullscreenElement) {
+      if (!document.fullscreenElement && isScreenShareFullscreen) {
+        setIsScreenShareFullscreen(false);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isScreenShareFullscreen) {
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+        }
         setIsScreenShareFullscreen(false);
       }
     };
 
     document.addEventListener("fullscreenchange", handleFullscreenChange);
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      window.removeEventListener("keydown", handleKeyDown);
     };
-  }, []);
+  }, [isScreenShareFullscreen]);
 
   // ─── Pre-warm canvas PiP stream on mount ─────────────────────────
   useEffect(() => {
@@ -1150,12 +1161,11 @@ export default function RoomVoiceChatPage() {
       setIsScreenShareFullscreen(false);
     } else {
       // Enter fullscreen
+      setIsScreenShareFullscreen(true);
       try {
         await container.requestFullscreen({ navigationUI: "hide" });
-        setIsScreenShareFullscreen(true);
       } catch (err) {
-        console.error("Fullscreen request failed:", err);
-        toast.error("Could not enter fullscreen mode");
+        console.warn("HTML5 Fullscreen request failed (using windowed fallback):", err);
       }
     }
   };
@@ -1428,7 +1438,7 @@ export default function RoomVoiceChatPage() {
           </div>
         ) : (
           /* ─── GRID LAYOUT ─── */
-          <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6 content-start pb-24">
+          <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6 content-start pb-24 grid-flow-dense">
             <AnimatePresence mode="popLayout">
               {participants.map((participant) => (
                 <motion.div
@@ -1439,11 +1449,13 @@ export default function RoomVoiceChatPage() {
                   transition={{ type: "spring", stiffness: 300, damping: 25 }}
                   key={participant.userId}
                   className={`group relative rounded-3xl bg-zinc-900/40 backdrop-blur-sm border border-zinc-800/50 overflow-hidden flex flex-col items-center justify-center transition-all hover:bg-zinc-800/40 hover:border-zinc-700/50 hover:shadow-xl hover:shadow-black/20 ${
-                    participant.isVideoOn ? "aspect-video" : "aspect-[3/4]"
+                    (participant.isVideoOn || participant.isScreenSharing)
+                      ? "col-span-2 row-span-2 aspect-video"
+                      : "aspect-[3/4]"
                   }`}
                 >
-                  {/* Video — shown when participant has video on */}
-                  {participant.isVideoOn ? (
+                  {/* Video — shown when participant has video on or is screen sharing */}
+                  {(participant.isVideoOn || participant.isScreenSharing) ? (
                     <>
                       {participant.userId === user?._id ? (
                         <video
