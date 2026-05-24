@@ -388,6 +388,9 @@ async function setupAutoUpdater() {
 }
 
 app.on("ready", () => {
+  // Set AppUserModelId for Windows taskbar icon grouping support
+  app.setAppUserModelId("com.callu.desktop");
+
   // Grant microphone, camera, and display-capture permissions automatically
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     const allowed = ["media", "audioCapture", "videoCapture", "notifications", "display-capture"];

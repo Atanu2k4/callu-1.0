@@ -1105,6 +1105,12 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
     const currentStream = localStreamRef.current;
     if (currentStream) {
       const newMuted = !isMutedRef.current;
+      
+      // If we are unmuting ourselves AND PTT is currently enabled, we turn PTT OFF!
+      if (!newMuted && isPTTEnabledRef.current) {
+        setIsPTTEnabled(false);
+      }
+
       currentStream.getAudioTracks().forEach((track) => {
         track.enabled = !newMuted;
       });
