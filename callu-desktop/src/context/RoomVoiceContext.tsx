@@ -149,6 +149,14 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
     }
     return false;
   });
+  const [pttKeycode, setPttKeycode] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("ptt-keycode");
+      if (saved) return parseInt(saved, 10);
+    }
+    return 29; // Default: Left Ctrl
+  });
+  const [isRecordingKeybind, setIsRecordingKeybind] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
   const [availableMics, setAvailableMics] = useState<MediaDeviceInfo[]>([]);
   const [availableSpeakers, setAvailableSpeakers] = useState<MediaDeviceInfo[]>([]);
@@ -161,6 +169,8 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
   const socketRef = useRef(socket);
   const isMutedRef = useRef(false);
   const isPTTEnabledRef = useRef(isPTTEnabled);
+  const pttKeycodeRef = useRef(pttKeycode);
+  const isRecordingKeybindRef = useRef(isRecordingKeybind);
   const isDeafenedRef = useRef(false);
   const isVoiceConnectedRef = useRef(false);
   const selectedSpeakerIdRef = useRef<string | null>(null);
@@ -173,11 +183,62 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
     isPTTEnabledRef.current = isPTTEnabled;
     localStorage.setItem("ptt-enabled", isPTTEnabled ? "true" : "false");
   }, [isPTTEnabled]);
+
   useEffect(() => {
-    if (isPTTEnabled && !isMutedRef.current) {
-      toggleMute();
-    }
-  }, [isPTTEnabled]);
+    pttKeycodeRef.current = pttKeycode;
+    localStorage.setItem("ptt-keycode", pttKeycode.toString());
+  }, [pttKeycode]);
+  useEffect(() => {
+    isRecordingKeybindRef.current = isRecordingKeybind;
+  }, [isRecordingKeybind]);
+
+  // Native browser fallback key listener for flawless, instant keybind recording
+  useEffect(() => {
+    if (!isRecordingKeybind) return;
+
+    const handleBrowserKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const codeToScanCode: Record<string, number> = {
+        "Escape": 1,
+        "Digit1": 2, "Digit2": 3, "Digit3": 4, "Digit4": 5, "Digit5": 6, "Digit6": 7, "Digit7": 8, "Digit8": 9, "Digit9": 10, "Digit0": 11,
+        "Minus": 12, "Equal": 13, "Backspace": 14,
+        "Tab": 15,
+        "KeyQ": 16, "KeyW": 17, "KeyE": 18, "KeyR": 19, "KeyT": 20, "KeyY": 21, "KeyU": 22, "KeyI": 23, "KeyO": 24, "KeyP": 25,
+        "BracketLeft": 26, "BracketRight": 27, "Enter": 28,
+        "ControlLeft": 29,
+        "KeyA": 30, "KeyS": 31, "KeyD": 32, "KeyF": 33, "KeyG": 34, "KeyH": 35, "KeyJ": 36, "KeyK": 37, "KeyL": 38,
+        "Semicolon": 39, "Quote": 40, "Backquote": 41,
+        "ShiftLeft": 42, "Backslash": 43,
+        "KeyZ": 44, "KeyX": 45, "KeyC": 46, "KeyV": 47, "KeyB": 48, "KeyN": 49, "KeyM": 50,
+        "Comma": 51, "Period": 52, "Slash": 53,
+        "ShiftRight": 54,
+        "AltLeft": 56,
+        "Space": 57,
+        "CapsLock": 58,
+        "F1": 59, "F2": 60, "F3": 61, "F4": 62, "F5": 63, "F6": 64, "F7": 65, "F8": 66, "F9": 67, "F10": 68,
+        "F11": 87, "F12": 88,
+        "ControlRight": 3613,
+        "AltRight": 3640,
+        "ArrowUp": 57416,
+        "ArrowLeft": 57419,
+        "ArrowRight": 57421,
+        "ArrowDown": 57424
+      };
+
+      const matchedScanCode = codeToScanCode[e.code];
+      if (matchedScanCode) {
+        setPttKeycode(matchedScanCode);
+        setIsRecordingKeybind(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleBrowserKeyDown, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", handleBrowserKeyDown, { capture: true });
+    };
+  }, [isRecordingKeybind]);
   useEffect(() => { isDeafenedRef.current = isDeafened; }, [isDeafened]);
   useEffect(() => { isVoiceConnectedRef.current = isVoiceConnected; }, [isVoiceConnected]);
   useEffect(() => { selectedSpeakerIdRef.current = selectedSpeakerId; }, [selectedSpeakerId]);
@@ -433,6 +494,7 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
           sampleRate: { ideal: 48000 }, // Higher quality audio (48kHz)
         },
       });
+
       localStreamRef.current = stream;
       setupLocalAudioAnalyzer(stream);
       void refreshDeviceLists();
@@ -1023,9 +1085,27 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
     const currentStream = localStreamRef.current;
     if (currentStream) {
       const newMuted = !isMutedRef.current;
-      currentStream.getAudioTracks().forEach((track) => {
-        track.enabled = !newMuted;
-      });
+      const audioTrack = currentStream.getAudioTracks()[0];
+
+      if (audioTrack) {
+        // track.enabled as secondary signal (generates silence locally)
+        audioTrack.enabled = !newMuted;
+
+        // Hard mute: replaceTrack(null) stops RTP audio packets entirely
+        // Hard unmute: replaceTrack(audioTrack) restores audio transmission
+        // This is the only reliable mute in modern Chrome/Electron
+        peerConnectionsRef.current.forEach((pc) => {
+          // Audio sender is always the first sender (added before video)
+          // After replaceTrack(null), sender.track becomes null but sender persists
+          const senders = pc.getSenders();
+          const audioSender = senders.find((s) => s.track?.kind === "audio") 
+            || senders[0]; // fallback: first sender is audio
+          if (audioSender) {
+            audioSender.replaceTrack(newMuted ? null : audioTrack).catch(() => {});
+          }
+        });
+      }
+
       setIsMuted(newMuted);
 
       // Broadcast mute state to other participants
@@ -1059,10 +1139,16 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
     let isKeyDown = false;
 
     const handleKeyDown = (data: { keycode: number }) => {
+      // If we are recording a custom keybind, capture this keypress, save the scan code, and exit recording
+      if (isRecordingKeybindRef.current) {
+        setPttKeycode(data.keycode);
+        setIsRecordingKeybind(false);
+        return;
+      }
+
       if (!isPTTEnabledRef.current) return;
-      // Left Ctrl is scan code 29 in libuiohook
-      const pttKeycode = 29;
-      if (data.keycode === pttKeycode) {
+      const currentPttKeycode = pttKeycodeRef.current;
+      if (data.keycode === currentPttKeycode) {
         if (!isKeyDown) {
           isKeyDown = true;
           setIsPTTActive(true);
@@ -1074,9 +1160,11 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
     };
 
     const handleKeyUp = (data: { keycode: number }) => {
+      if (isRecordingKeybindRef.current) return;
+      
       if (!isPTTEnabledRef.current) return;
-      const pttKeycode = 29;
-      if (data.keycode === pttKeycode) {
+      const currentPttKeycode = pttKeycodeRef.current;
+      if (data.keycode === currentPttKeycode) {
         isKeyDown = false;
         setIsPTTActive(false);
         if (!isMutedRef.current) {
@@ -1123,6 +1211,10 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
         isPTTActive,
         isPTTEnabled,
         setIsPTTEnabled,
+        pttKeycode,
+        setPttKeycode,
+        isRecordingKeybind,
+        setIsRecordingKeybind,
       }}
     >
       {children}

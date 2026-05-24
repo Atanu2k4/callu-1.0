@@ -22,6 +22,45 @@ import {
 import { toast } from "sonner";
 import { useRoomVoice } from "@/context/RoomVoiceContext";
 
+const SCAN_CODE_MAP: Record<number, string> = {
+  1: "Escape",
+  2: "1", 3: "2", 4: "3", 5: "4", 6: "5", 7: "6", 8: "7", 9: "8", 10: "9", 11: "0",
+  12: "-", 13: "=", 14: "Backspace",
+  15: "Tab",
+  16: "Q", 17: "W", 18: "E", 19: "R", 20: "T", 21: "Y", 22: "U", 23: "I", 24: "O", 25: "P",
+  26: "[", 27: "]", 28: "Enter",
+  29: "Left Ctrl",
+  30: "A", 31: "S", 32: "D", 33: "F", 34: "G", 35: "H", 36: "J", 37: "K", 38: "L",
+  39: ";", 40: "'", 41: "`",
+  42: "Left Shift", 43: "\\",
+  44: "Z", 45: "X", 46: "C", 47: "V", 48: "B", 49: "N", 50: "M",
+  51: ",", 52: ".", 53: "/",
+  54: "Right Shift",
+  55: "Numpad *",
+  56: "Left Alt",
+  57: "Space",
+  58: "Caps Lock",
+  59: "F1", 60: "F2", 61: "F3", 62: "F4", 63: "F5", 64: "F6", 65: "F7", 66: "F8", 67: "F9", 68: "F10",
+  69: "Num Lock", 70: "Scroll Lock",
+  71: "Numpad 7", 72: "Numpad 8", 73: "Numpad 9", 74: "Numpad -",
+  75: "Numpad 4", 76: "Numpad 5", 77: "Numpad 6", 78: "Numpad +",
+  79: "Numpad 1", 80: "Numpad 2", 81: "Numpad 3", 82: "Numpad 0", 83: "Numpad .",
+  87: "F11", 88: "F12",
+  3613: "Right Ctrl",
+  3638: "Numpad /",
+  3640: "Right Alt",
+  3653: "Num Lock",
+  3655: "Home", 3657: "Page Up",
+  3663: "End", 3665: "Page Down",
+  3666: "Insert", 3667: "Delete",
+  3675: "Left Win", 3676: "Right Win",
+  3677: "Apps",
+  57416: "Up Arrow",
+  57419: "Left Arrow",
+  57421: "Right Arrow",
+  57424: "Down Arrow"
+};
+
 export default function SettingsPage() {
   const { user, logout, updateUser } = useAuth();
   const {
@@ -32,7 +71,11 @@ export default function SettingsPage() {
     selectedMicId,
     selectedSpeakerId,
     switchMicDevice,
-    setSpeakerDevice
+    setSpeakerDevice,
+    pttKeycode,
+    setPttKeycode,
+    isRecordingKeybind,
+    setIsRecordingKeybind
   } = useRoomVoice();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"profile" | "notifications" | "privacy" | "account" | "updates" | "voice">("profile");
@@ -576,14 +619,24 @@ export default function SettingsPage() {
                 <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in">
                   <div>
                     <p className="text-white text-sm font-medium">PTT Keyboard Shortcut</p>
-                    <p className="text-xs text-zinc-500 mt-0.5">Physical system key mapped for Push-to-Talk</p>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      {isRecordingKeybind ? "Press any key on your keyboard to assign it..." : "Click the key badge to configure a new shortcut"}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <kbd className="px-3 py-1.5 bg-zinc-900 border border-zinc-700 rounded-lg text-xs font-semibold text-zinc-300 font-mono shadow-inner">
-                      Left Ctrl
-                    </kbd>
-                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500">
-                      Global Hook
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setIsRecordingKeybind(true)}
+                      disabled={isRecordingKeybind}
+                      className={`relative px-4 py-2 bg-zinc-900 border text-xs font-semibold font-mono rounded-lg transition-all shadow-inner cursor-pointer active:scale-95 select-none ${
+                        isRecordingKeybind 
+                          ? "border-emerald-500/50 bg-emerald-950/20 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.25)] animate-pulse" 
+                          : "border-zinc-700 hover:border-zinc-500 hover:bg-zinc-800 text-zinc-300 hover:text-white"
+                      }`}
+                    >
+                      {isRecordingKeybind ? "Recording..." : SCAN_CODE_MAP[pttKeycode] || `Key Code ${pttKeycode}`}
+                    </button>
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 select-none">
+                      {isRecordingKeybind ? "Waiting" : "Global Hook"}
                     </span>
                   </div>
                 </div>
