@@ -42,6 +42,12 @@ interface RoomVoiceContextType {
   localVideoTrackRef: MutableRefObject<MediaStreamTrack | null>;
   localVideoStreamRef: MutableRefObject<MediaStream | null>;
   isPTTActive: boolean;
+  isPTTEnabled: boolean;
+  setIsPTTEnabled: (val: boolean) => void;
+  pttKeycode: number;
+  setPttKeycode: (code: number) => void;
+  isRecordingKeybind: boolean;
+  setIsRecordingKeybind: (val: boolean) => void;
 }
 
 const RoomVoiceContext = createContext<RoomVoiceContextType>({
@@ -69,6 +75,12 @@ const RoomVoiceContext = createContext<RoomVoiceContextType>({
   localVideoTrackRef: { current: null },
   localVideoStreamRef: { current: null },
   isPTTActive: false,
+  isPTTEnabled: false,
+  setIsPTTEnabled: () => {},
+  pttKeycode: 29,
+  setPttKeycode: () => {},
+  isRecordingKeybind: false,
+  setIsRecordingKeybind: () => {},
 });
 
 const ICE_CONFIG: RTCConfiguration = {
@@ -131,6 +143,12 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
   const [voiceRoomName, setVoiceRoomName] = useState<string | null>(null);
   const [participants, setParticipants] = useState<RoomParticipant[]>([]);
   const [isMuted, setIsMuted] = useState(false);
+  const [isPTTEnabled, setIsPTTEnabled] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("ptt-enabled") === "true";
+    }
+    return false;
+  });
   const [isDeafened, setIsDeafened] = useState(false);
   const [availableMics, setAvailableMics] = useState<MediaDeviceInfo[]>([]);
   const [availableSpeakers, setAvailableSpeakers] = useState<MediaDeviceInfo[]>([]);
@@ -142,6 +160,7 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
   const userRef = useRef(user);
   const socketRef = useRef(socket);
   const isMutedRef = useRef(false);
+  const isPTTEnabledRef = useRef(isPTTEnabled);
   const isDeafenedRef = useRef(false);
   const isVoiceConnectedRef = useRef(false);
   const selectedSpeakerIdRef = useRef<string | null>(null);
@@ -150,6 +169,15 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
   useEffect(() => { userRef.current = user; }, [user]);
   useEffect(() => { socketRef.current = socket; }, [socket]);
   useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
+  useEffect(() => {
+    isPTTEnabledRef.current = isPTTEnabled;
+    localStorage.setItem("ptt-enabled", isPTTEnabled ? "true" : "false");
+  }, [isPTTEnabled]);
+  useEffect(() => {
+    if (isPTTEnabled && !isMutedRef.current) {
+      toggleMute();
+    }
+  }, [isPTTEnabled]);
   useEffect(() => { isDeafenedRef.current = isDeafened; }, [isDeafened]);
   useEffect(() => { isVoiceConnectedRef.current = isVoiceConnected; }, [isVoiceConnected]);
   useEffect(() => { selectedSpeakerIdRef.current = selectedSpeakerId; }, [selectedSpeakerId]);
@@ -1031,6 +1059,7 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
     let isKeyDown = false;
 
     const handleKeyDown = (data: { keycode: number }) => {
+      if (!isPTTEnabledRef.current) return;
       // Left Ctrl is scan code 29 in libuiohook
       const pttKeycode = 29;
       if (data.keycode === pttKeycode) {
@@ -1045,6 +1074,7 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
     };
 
     const handleKeyUp = (data: { keycode: number }) => {
+      if (!isPTTEnabledRef.current) return;
       const pttKeycode = 29;
       if (data.keycode === pttKeycode) {
         isKeyDown = false;
@@ -1091,6 +1121,8 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
         localVideoTrackRef,
         localVideoStreamRef,
         isPTTActive,
+        isPTTEnabled,
+        setIsPTTEnabled,
       }}
     >
       {children}

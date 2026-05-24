@@ -16,14 +16,26 @@ import {
   RefreshCw,
   ArrowDownToLine,
   CheckCircle2,
-  Sparkles
+  Sparkles,
+  Mic
 } from "lucide-react";
 import { toast } from "sonner";
+import { useRoomVoice } from "@/context/RoomVoiceContext";
 
 export default function SettingsPage() {
   const { user, logout, updateUser } = useAuth();
+  const {
+    isPTTEnabled,
+    setIsPTTEnabled,
+    availableMics,
+    availableSpeakers,
+    selectedMicId,
+    selectedSpeakerId,
+    switchMicDevice,
+    setSpeakerDevice
+  } = useRoomVoice();
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"profile" | "notifications" | "privacy" | "account" | "updates">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "notifications" | "privacy" | "account" | "updates" | "voice">("profile");
 
   // Profile form state
   const [name, setName] = useState(user?.name || "");
@@ -215,6 +227,7 @@ export default function SettingsPage() {
 
   const tabs = [
     { id: "profile", label: "Profile", icon: User },
+    { id: "voice", label: "Voice & Audio", icon: Mic },
     { id: "notifications", label: "Notifications", icon: Bell },
     { id: "privacy", label: "Privacy", icon: Shield },
     { id: "account", label: "Account", icon: Lock },
@@ -526,6 +539,99 @@ export default function SettingsPage() {
                     showOnlineStatus ? "translate-x-8" : "translate-x-1"
                   }`} />
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Voice & Audio Tab */}
+      {activeTab === "voice" && (
+        <div className="space-y-6">
+          {/* Push-to-Talk Configuration */}
+          <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 backdrop-blur-sm">
+            <h3 className="text-lg font-medium text-white mb-6">Voice Mode Settings</h3>
+            
+            <div className="space-y-6">
+              <div className="flex items-center justify-between py-3 border-b border-zinc-800/50">
+                <div className="max-w-[80%]">
+                  <p className="text-white font-medium">Push-to-Talk (PTT)</p>
+                  <p className="text-sm text-zinc-500 mt-1 leading-relaxed">
+                    Automatically mutes your microphone until you hold the PTT key shortcut. Extremely useful to prevent keyboard typing noises, echo, or background distractions.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsPTTEnabled(!isPTTEnabled)}
+                  className={`relative w-14 h-7 rounded-full transition-colors cursor-pointer shrink-0 ${
+                    isPTTEnabled ? "bg-emerald-500" : "bg-zinc-700"
+                  }`}
+                >
+                  <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                    isPTTEnabled ? "translate-x-8" : "translate-x-1"
+                  }`} />
+                </button>
+              </div>
+
+              {isPTTEnabled && (
+                <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in">
+                  <div>
+                    <p className="text-white text-sm font-medium">PTT Keyboard Shortcut</p>
+                    <p className="text-xs text-zinc-500 mt-0.5">Physical system key mapped for Push-to-Talk</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <kbd className="px-3 py-1.5 bg-zinc-900 border border-zinc-700 rounded-lg text-xs font-semibold text-zinc-300 font-mono shadow-inner">
+                      Left Ctrl
+                    </kbd>
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500">
+                      Global Hook
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Voice Input / Output Devices */}
+          <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 backdrop-blur-sm">
+            <h3 className="text-lg font-medium text-white mb-6">Hardware & Audio Devices</h3>
+            
+            <div className="space-y-6">
+              <div>
+                <label className="block text-zinc-400 text-sm font-medium mb-3">Input Device (Microphone)</label>
+                <select
+                  value={selectedMicId || ""}
+                  onChange={(e) => switchMicDevice(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl p-3.5 focus:outline-none focus:border-zinc-700 cursor-pointer text-sm"
+                >
+                  {availableMics.length === 0 ? (
+                    <option value="">No Microphones Detected</option>
+                  ) : (
+                    availableMics.map((mic) => (
+                      <option key={mic.deviceId} value={mic.deviceId}>
+                        {mic.label || `Microphone (${mic.deviceId.slice(0, 5)})`}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 text-sm font-medium mb-3">Output Device (Playback)</label>
+                <select
+                  value={selectedSpeakerId || ""}
+                  onChange={(e) => setSpeakerDevice(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl p-3.5 focus:outline-none focus:border-zinc-700 cursor-pointer text-sm"
+                >
+                  {availableSpeakers.length === 0 ? (
+                    <option value="">Default System Device</option>
+                  ) : (
+                    availableSpeakers.map((speaker) => (
+                      <option key={speaker.deviceId} value={speaker.deviceId}>
+                        {speaker.label || `Speaker (${speaker.deviceId.slice(0, 5)})`}
+                      </option>
+                    ))
+                  )}
+                </select>
               </div>
             </div>
           </div>
