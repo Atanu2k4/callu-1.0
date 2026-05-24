@@ -12,14 +12,18 @@ import {
   Shield,
   LogOut,
   Trash2,
-  Save
+  Save,
+  RefreshCw,
+  ArrowDownToLine,
+  CheckCircle2,
+  Sparkles
 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function SettingsPage() {
   const { user, logout } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"profile" | "notifications" | "privacy" | "account">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "notifications" | "privacy" | "account" | "updates">("profile");
 
   // Profile form state
   const [name, setName] = useState(user?.name || "");
@@ -35,6 +39,16 @@ export default function SettingsPage() {
   const [profileVisibility, setProfileVisibility] = useState<"everyone" | "members" | "private">("members");
   const [showOnlineStatus, setShowOnlineStatus] = useState(true);
 
+  // Manual Update states
+  const [currentVersion, setCurrentVersion] = useState("0.1.0");
+  const [updateStatus, setUpdateStatus] = useState<{
+    status: "idle" | "checking" | "available" | "downloading" | "downloaded" | "error" | "not-available";
+    message: string;
+    percent?: number;
+    bytesPerSecond?: number;
+    version?: string;
+  }>({ status: "idle", message: "" });
+
   useEffect(() => {
     if (user) {
       setName(user.name);
@@ -42,6 +56,45 @@ export default function SettingsPage() {
       setMobile(user.mobile || "");
     }
   }, [user]);
+
+  useEffect(() => {
+    if (window.electron) {
+      window.electron.invoke("get-app-version").then((version) => {
+        if (version) setCurrentVersion(version);
+      }).catch((err) => {
+        console.error("Failed to get app version:", err);
+      });
+
+      const unsubscribe = window.electron.on("update-status", (data: any) => {
+        setUpdateStatus(data);
+      });
+
+      return () => {
+        unsubscribe();
+      };
+    }
+  }, []);
+
+  const handleCheckForUpdates = () => {
+    if (window.electron) {
+      setUpdateStatus({ status: "checking", message: "Checking for updates..." });
+      window.electron.send("check-for-updates");
+    } else {
+      toast.error("Updates are only checkable in desktop app.");
+    }
+  };
+
+  const handleDownloadUpdate = () => {
+    if (window.electron) {
+      window.electron.send("download-update");
+    }
+  };
+
+  const handleInstallUpdate = () => {
+    if (window.electron) {
+      window.electron.send("install-update");
+    }
+  };
 
   const handleSaveProfile = async () => {
     setLoading(true);
@@ -63,6 +116,7 @@ export default function SettingsPage() {
     { id: "notifications", label: "Notifications", icon: Bell },
     { id: "privacy", label: "Privacy", icon: Shield },
     { id: "account", label: "Account", icon: Lock },
+    { id: "updates", label: "App Updates", icon: RefreshCw },
   ] as const;
 
   return (
@@ -339,6 +393,102 @@ export default function SettingsPage() {
               <div className="flex justify-between py-2">
                 <span className="text-zinc-400">Member Since</span>
                 <span className="text-white">2026</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Updates Tab */}
+      {activeTab === "updates" && (
+        <div className="space-y-4">
+          <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 backdrop-blur-sm">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 bg-zinc-800 rounded-lg flex items-center justify-center">
+                <RefreshCw className={`w-5 h-5 text-white ${updateStatus.status === "checking" ? "animate-spin" : ""}`} />
+              </div>
+              <div>
+                <h3 className="text-lg font-medium text-white">App Updates</h3>
+                <p className="text-sm text-zinc-500">Keep Callu up to date with the latest features</p>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div className="flex justify-between items-center py-3 border-b border-zinc-800/50">
+                <span className="text-zinc-400">Current Version</span>
+                <span className="text-white font-mono bg-zinc-800/80 px-2.5 py-1 rounded-md text-xs border border-zinc-700">v{currentVersion}</span>
+              </div>
+
+              {updateStatus.status !== "idle" && (
+                <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800 flex items-start gap-3">
+                  {updateStatus.status === "checking" && (
+                    <RefreshCw className="w-5 h-5 text-zinc-400 animate-spin shrink-0 mt-0.5" />
+                  )}
+                  {updateStatus.status === "available" && (
+                    <Sparkles className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
+                  )}
+                  {updateStatus.status === "downloading" && (
+                    <ArrowDownToLine className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5 animate-bounce" />
+                  )}
+                  {updateStatus.status === "downloaded" && (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+                  )}
+                  {updateStatus.status === "not-available" && (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+                  )}
+                  
+                  <div className="flex-1">
+                    <p className="text-white text-sm font-medium">{updateStatus.message}</p>
+                    {updateStatus.status === "downloading" && typeof updateStatus.percent !== "undefined" && (
+                      <div className="mt-3 space-y-2">
+                        <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-emerald-500 transition-all duration-300"
+                            style={{ width: `${updateStatus.percent}%` }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-xs text-zinc-500 font-mono">
+                          <span>{updateStatus.percent.toFixed(1)}%</span>
+                          {updateStatus.bytesPerSecond && (
+                            <span>{(updateStatus.bytesPerSecond / 1024).toFixed(1)} KB/s</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-3 pt-2">
+                {updateStatus.status === "idle" || updateStatus.status === "not-available" || updateStatus.status === "error" ? (
+                  <button
+                    onClick={handleCheckForUpdates}
+                    className="w-full py-3 bg-white text-black hover:bg-zinc-200 font-medium rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Check for Updates
+                  </button>
+                ) : null}
+
+                {updateStatus.status === "available" && (
+                  <button
+                    onClick={handleDownloadUpdate}
+                    className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                  >
+                    <ArrowDownToLine className="w-4 h-4" />
+                    Download Update
+                  </button>
+                )}
+
+                {updateStatus.status === "downloaded" && (
+                  <button
+                    onClick={handleInstallUpdate}
+                    className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                  >
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Restart & Install Update
+                  </button>
+                )}
               </div>
             </div>
           </div>

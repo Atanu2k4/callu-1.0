@@ -13,6 +13,11 @@ const ALLOWED_CHANNELS = [
   "get-secure-session",
   "set-secure-session",
   "remove-secure-session",
+  "check-for-updates",
+  "download-update",
+  "install-update",
+  "get-app-version",
+  "update-status",
 ];
 
 contextBridge.exposeInMainWorld("electron", {

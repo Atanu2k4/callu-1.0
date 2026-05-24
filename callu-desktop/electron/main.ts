@@ -170,6 +170,40 @@ function createMainWindow() {
     store.delete("session");
   });
 
+  // Manual Check for Updates handlers
+  ipcMain.on("check-for-updates", () => {
+    if (isDev) {
+      mainWindow?.webContents.send("update-status", {
+        status: "not-available",
+        message: "Updates are disabled in development mode."
+      });
+      return;
+    }
+    autoUpdater.checkForUpdates().catch((err) => {
+      mainWindow?.webContents.send("update-status", {
+        status: "error",
+        message: err.message || "Failed to check for updates."
+      });
+    });
+  });
+
+  ipcMain.on("download-update", () => {
+    autoUpdater.downloadUpdate().catch((err) => {
+      mainWindow?.webContents.send("update-status", {
+        status: "error",
+        message: err.message || "Failed to download update."
+      });
+    });
+  });
+
+  ipcMain.on("install-update", () => {
+    autoUpdater.quitAndInstall();
+  });
+
+  ipcMain.handle("get-app-version", () => {
+    return app.getVersion();
+  });
+
   // Initialize tray
   createTray(mainWindow, () => {
     forceQuit = true;
@@ -187,14 +221,17 @@ function setupAutoUpdater() {
 
   autoUpdater.on("checking-for-update", () => {
     console.log("[AutoUpdater] Checking for update...");
+    mainWindow?.webContents.send("update-status", { status: "checking", message: "Checking for updates..." });
   });
 
   autoUpdater.on("update-not-available", (info) => {
     console.log(`[AutoUpdater] Update not available. Current version: ${app.getVersion()}`);
+    mainWindow?.webContents.send("update-status", { status: "not-available", message: `Your app is up to date (v${app.getVersion()}).` });
   });
 
   autoUpdater.on("update-available", (info) => {
     console.log(`[AutoUpdater] Update available! New version: ${info.version}`);
+    mainWindow?.webContents.send("update-status", { status: "available", message: `New version v${info.version} is available.`, version: info.version });
     dialog.showMessageBox({
       type: "info",
       title: "Update Available",
@@ -212,10 +249,17 @@ function setupAutoUpdater() {
 
   autoUpdater.on("download-progress", (progressObj) => {
     console.log(`[AutoUpdater] Downloading... ${progressObj.percent.toFixed(2)}% (${(progressObj.bytesPerSecond / 1024).toFixed(2)} KB/s)`);
+    mainWindow?.webContents.send("update-status", {
+      status: "downloading",
+      message: `Downloading update...`,
+      percent: progressObj.percent,
+      bytesPerSecond: progressObj.bytesPerSecond
+    });
   });
 
   autoUpdater.on("update-downloaded", () => {
     console.log("[AutoUpdater] Update downloaded successfully!");
+    mainWindow?.webContents.send("update-status", { status: "downloaded", message: "Update downloaded. Ready to install!" });
     dialog.showMessageBox({
       type: "info",
       title: "Update Ready",
@@ -232,6 +276,7 @@ function setupAutoUpdater() {
 
   autoUpdater.on("error", (err) => {
     console.error("Error in auto-updater: ", err);
+    mainWindow?.webContents.send("update-status", { status: "error", message: err.message || "Error checking for updates." });
   });
 
   // Check for updates immediately, then every hour
