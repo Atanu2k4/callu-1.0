@@ -402,32 +402,62 @@ app.on("ready", () => {
     return allowed.includes(permission);
   });
 
-  // Redirect absolute local requests (like file:///avatars/...) to the remote production server
+  // Redirect absolute local requests (like file:///avatars/...) to the local packaged assets or remote server
   session.defaultSession.webRequest.onBeforeRequest(
     { urls: ["file:///*"] },
     (details, callback) => {
       const urlStr = details.url;
-      const prefixes = [
-        "file:///avatars/",
-        "file:///music/",
-        "file:///Lotties/",
-        "file:///Verification-Blue-Tick-PNG.webp",
-        "file:///Verification-Blue-Tick-PNG.png",
-        "file:///file.svg",
-        "file:///globe.svg",
-        "file:///next.svg",
-        "file:///vercel.svg",
-        "file:///window.svg"
-      ];
-
-      for (const prefix of prefixes) {
-        if (urlStr.startsWith(prefix)) {
-          const relativePath = urlStr.substring(8); // remove 'file:///'
+      try {
+        const parsedUrl = new URL(urlStr);
+        let pathname = parsedUrl.pathname;
+        
+        // On Windows, the pathname starts with "/C:" or "/D:", strip it
+        if (pathname.match(/^\/[A-Za-z]:/)) {
+          pathname = pathname.substring(3);
+        }
+        
+        // Remove leading slash if any
+        const relativePath = pathname.startsWith("/") ? pathname.substring(1) : pathname;
+        
+        const assetPrefixes = [
+          "avatars/",
+          "music/",
+          "Lotties/",
+          "Verification-Blue-Tick-PNG.webp",
+          "Verification-Blue-Tick-PNG.png",
+          "file.svg",
+          "globe.svg",
+          "next.svg",
+          "vercel.svg",
+          "window.svg"
+        ];
+        
+        const matchesAsset = assetPrefixes.some(prefix => {
+          if (prefix.endsWith("/")) {
+            return relativePath.startsWith(prefix);
+          }
+          return relativePath === prefix;
+        });
+        
+        if (matchesAsset) {
+          // Attempt to load locally first from dist directory (fast, works offline)
+          const localPath = path.join(__dirname, "../../dist", relativePath);
+          if (fs.existsSync(localPath)) {
+            const redirectURL = pathToFileURL(localPath).href;
+            console.log(`[Asset Redirect] Local: ${urlStr} -> ${redirectURL}`);
+            callback({ redirectURL });
+            return;
+          }
+          
+          // Fallback to remote production server
           const backendUrl = process.env.VITE_API_URL || "https://callu-production.up.railway.app";
           const redirectURL = `${backendUrl}/${relativePath}`;
+          console.log(`[Asset Redirect] Remote Fallback: ${urlStr} -> ${redirectURL}`);
           callback({ redirectURL });
           return;
         }
+      } catch (err) {
+        console.error("Error processing webRequest URL:", err);
       }
       callback({});
     }
