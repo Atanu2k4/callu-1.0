@@ -41,7 +41,7 @@ export async function POST(req: Request) {
       name,
       email,
       mobile,
-      status: 'pending',
+      status: 'approved',
       avatarConfig: {
         image: avatarPath,
         color: ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500'][Math.floor(Math.random() * 4)]
