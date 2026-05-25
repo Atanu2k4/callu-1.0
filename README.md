@@ -1,36 +1,80 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Callu
 
-## Getting Started
+Callu is a real-time community platform with:
 
-First, run the development server:
+- a Next.js web app
+- a Node/Express-style server entrypoint for sockets and background tasks
+- an Electron/Vite desktop app in `callu-desktop/`
+
+## Requirements
+
+- Node.js 20+
+- npm 10+
+- MongoDB
+- Resend account for email delivery
+- ImageKit account for chat uploads
+
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Create a `.env` file in the repository root with the needed values:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+MONGODB_URI=
+NEXT_PUBLIC_URL=
+ADMIN_ID=
+ADMIN_PASSWORD=
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=
+OTP_BCC_EMAIL=
+IMAGEKIT_PUBLIC_KEY=
+IMAGEKIT_PRIVATE_KEY=
+IMAGEKIT_URL_ENDPOINT=
+GH_TOKEN=
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+`NEXT_PUBLIC_URL` should point to the deployed web app in production.
 
-## Learn More
+## Scripts
 
-To learn more about Next.js, take a look at the following resources:
+### Root app
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `npm run dev` - start the web app and server in development
+- `npm run build` - build the Next.js app and compile `server.ts`
+- `npm run start` - start the compiled server
+- `npm run lint` - run ESLint
+- `npm run seed` - seed the database
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Desktop app
 
-## Deploy on Vercel
+From `callu-desktop/`:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `npm run dev` - start the Vite app
+- `npm run build` - build the web bundle and Electron TypeScript
+- `npm run electron:dev` - run Vite and Electron together
+- `npm run electron:build` - create a packaged desktop build
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Project structure
+
+- `app/` - Next.js routes, API routes, and dashboard pages
+- `components/` - shared React components
+- `context/` - client state providers
+- `lib/` - server utilities, database, and email helpers
+- `models/` - MongoDB models
+- `public/` - static assets
+- `server.ts` - custom server bootstrap
+- `callu-desktop/` - desktop application source
+
+## Local development
+
+1. Start MongoDB.
+2. Set the environment variables above.
+3. Run `npm run dev`.
+4. Open `http://localhost:3000`.
+
+## Deployment
+
+The repository includes `render.yaml` for Render deployment. Make sure the production environment sets the same variables listed above.
