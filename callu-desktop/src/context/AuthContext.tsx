@@ -111,6 +111,41 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     void init();
+
+    if (window.electron) {
+      const cleanup = window.electron.on("oauth-token", async (token: string) => {
+        console.log("[Auth] Received OAuth token from deep link!");
+        try {
+          // Instead of fetch, let's use the baseUrl config to hit the right API
+          const baseUrl = import.meta.env.VITE_API_URL || "https://callu.up.railway.app";
+          const res = await fetch(`${baseUrl}/api/auth/session`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token }),
+          });
+          
+          if (res.ok) {
+            const data = await res.json();
+            console.log("[Auth] ✓ OAuth session validated, user:", data.user?.email);
+            setUser(data.user);
+            localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+            if (data.sessionToken && data.expiresAt) {
+              localStorage.setItem(
+                SESSION_KEY,
+                JSON.stringify({ token: data.sessionToken, expiresAt: data.expiresAt })
+              );
+            }
+          } else {
+            console.warn("[Auth] OAuth session validation failed:", res.status);
+            toast.error("Login failed. Please try again.");
+          }
+        } catch (error) {
+          console.error("[Auth] OAuth session validation error:", error);
+          toast.error("Login failed due to network error.");
+        }
+      });
+      return () => cleanup();
+    }
   }, []);
 
   const login = async (emailOrId: string, password?: string, isAdmin?: boolean) => {

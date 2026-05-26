@@ -2005,6 +2005,14 @@ export default function RoomVoiceChatPage() {
         />
       )}
 
+      {/* Edge trigger to open chat on hover */}
+      {!isChatOpen && (
+        <div 
+          className="fixed top-0 right-0 h-full w-4 z-[45] hidden sm:block" 
+          onMouseEnter={() => setIsChatOpen(true)}
+        />
+      )}
+
       {/* Room Chat Panel */}
       <AnimatePresence>
         {isChatOpen && (
@@ -2017,6 +2025,7 @@ export default function RoomVoiceChatPage() {
               onClick={() => setIsChatOpen(false)}
             />
             <motion.aside
+              onMouseLeave={() => setIsChatOpen(false)}
               initial={{ x: 480, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 480, opacity: 0 }}

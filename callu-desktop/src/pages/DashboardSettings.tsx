@@ -73,7 +73,11 @@ export default function SettingsPage() {
     pttKeycode,
     setPttKeycode,
     isRecordingKeybind,
-    setIsRecordingKeybind
+    setIsRecordingKeybind,
+    muteKeycode,
+    setMuteKeycode,
+    isRecordingMuteKeybind,
+    setIsRecordingMuteKeybind,
   } = useRoomVoice();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"profile" | "notifications" | "privacy" | "account" | "updates" | "voice">("profile");
@@ -593,9 +597,9 @@ export default function SettingsPage() {
       {activeTab === "voice" && (
         <div className="space-y-6">
           <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 backdrop-blur-sm">
-            <h3 className="text-lg font-medium text-white mb-2">Push-to-Talk Key</h3>
+            <h3 className="text-lg font-medium text-white mb-2">Keybinds</h3>
             <p className="text-sm text-zinc-500 mb-6 leading-relaxed">
-              Configure which key activates Push-to-Talk. You can enable PTT from the microphone dropdown arrow inside a voice room.
+              Configure global keyboard shortcuts. PTT requires enabling it from the microphone dropdown inside a voice room.
             </p>
             
             <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -625,6 +629,47 @@ export default function SettingsPage() {
                 </button>
                 <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 select-none">
                   {isRecordingKeybind ? "Waiting" : "Global Hook"}
+                </span>
+              </div>
+            </div>
+
+            {/* Toggle Mute Keybind */}
+            <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-3">
+              <div>
+                <p className="text-white text-sm font-medium">Toggle Mute Shortcut</p>
+                <p className="text-xs text-zinc-500 mt-1">
+                  {isRecordingMuteKeybind ? "Press any key on your keyboard to assign it..." : "Press this key anytime in a voice room to toggle mute"}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={(e) => {
+                    e.currentTarget.blur();
+                    if (typeof document !== "undefined") {
+                      (document.activeElement as HTMLElement)?.blur();
+                    }
+                    setIsRecordingMuteKeybind(true);
+                  }}
+                  disabled={isRecordingMuteKeybind}
+                  className={`relative px-4 py-2 bg-zinc-900 border text-xs font-semibold font-mono rounded-lg transition-all shadow-inner cursor-pointer active:scale-95 select-none ${
+                    isRecordingMuteKeybind
+                      ? "border-emerald-500/50 bg-emerald-950/20 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.25)] animate-pulse"
+                      : "border-zinc-700 hover:border-zinc-500 hover:bg-zinc-800 text-zinc-300 hover:text-white"
+                  }`}
+                >
+                  {isRecordingMuteKeybind ? "Recording..." : muteKeycode > 0 ? (SCAN_CODE_MAP[muteKeycode] || `Key Code ${muteKeycode}`) : "Not Set"}
+                </button>
+                {muteKeycode > 0 && !isRecordingMuteKeybind && (
+                  <button
+                    onClick={() => { setMuteKeycode(0); localStorage.removeItem("mute-keycode"); }}
+                    className="text-xs text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
+                    title="Clear keybind"
+                  >
+                    Clear
+                  </button>
+                )}
+                <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 select-none">
+                  {isRecordingMuteKeybind ? "Waiting" : "Global"}
                 </span>
               </div>
             </div>

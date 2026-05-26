@@ -159,6 +159,8 @@ export default function MembersPage() {
   const [loading, setLoading] = useState(true);
   const [notifyState, setNotifyState] = useState<Record<string, "idle" | "loading" | "sent">>({});
 
+  const { socket } = useSocket();
+
   useEffect(() => {
     const fetchUsers = async () => {
       try {
@@ -173,8 +175,27 @@ export default function MembersPage() {
         setLoading(false);
       }
     };
+
     if (user) fetchUsers();
   }, [user]);
+
+  // Listen for new members joining in real-time via Socket.io
+  useEffect(() => {
+    if (!socket || !user) return;
+
+    const handleNewMember = (newMember: User) => {
+      // Don't add self
+      if (newMember._id === user._id) return;
+      setUsers((prev) => {
+        // Avoid duplicates
+        if (prev.some((u) => u._id === newMember._id)) return prev;
+        return [...prev, newMember];
+      });
+    };
+
+    socket.on("new-member", handleNewMember);
+    return () => { socket.off("new-member", handleNewMember); };
+  }, [socket, user]);
 
   const isOnline = (id: string) => onlineUsers.includes(id);
   const onlineCount = users.filter((u) => isOnline(u._id)).length;
