@@ -276,7 +276,7 @@ export default function SettingsPage() {
   ] as const;
 
   return (
-    <div className="space-y-8 max-w-4xl">
+    <div className="space-y-8 max-w-6xl w-full">
       <header>
         <h2 className="text-3xl font-light tracking-tight text-white">Settings</h2>
         <p className="text-zinc-500 mt-2">Manage your account and preferences</p>
@@ -290,7 +290,7 @@ export default function SettingsPage() {
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-2 px-5 py-3 rounded-xl font-medium transition-all whitespace-nowrap cursor-pointer ${
               activeTab === tab.id
-                ? "bg-white text-black"
+                ? "bg-gradient-to-br from-emerald-500/20 to-transparent text-white border border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.15)]"
                 : "bg-zinc-900/40 text-zinc-400 hover:text-white hover:bg-zinc-800/60 border border-zinc-800"
             }`}
           >
@@ -302,39 +302,39 @@ export default function SettingsPage() {
 
       {/* Profile Tab */}
       {activeTab === "profile" && (
-        <div className="space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           {/* Avatar Section */}
           <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 backdrop-blur-sm">
             <h3 className="text-lg font-medium text-white mb-4">Customize Profile Avatar</h3>
-            <div className="flex flex-col md:flex-row gap-6 items-start">
-              {/* Current Preview */}
-              <div className="flex flex-col items-center gap-3 shrink-0">
-                <div 
-                  className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center border-2 transition-colors duration-300"
-                  style={{ 
-                    backgroundColor: selectedColor,
-                    borderColor: selectedColor === "#27272a" ? "#3f3f46" : selectedColor 
-                  }}
-                >
-                  {selectedAvatar ? (
-                    <img
-                      src={selectedAvatar}
-                      alt="Preview"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-2xl font-bold text-white">
-                      {name?.[0]?.toUpperCase() || "U"}
-                    </span>
-                  )}
+            <div className="flex flex-col gap-6">
+              {/* Top Row: Preview & Colors */}
+              <div className="flex flex-row gap-6 items-center w-full">
+                {/* Current Preview */}
+                <div className="flex flex-col items-center gap-3 shrink-0">
+                  <div 
+                    className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center border-2 transition-colors duration-300"
+                    style={{ 
+                      backgroundColor: selectedColor,
+                      borderColor: selectedColor === "#27272a" ? "#3f3f46" : selectedColor 
+                    }}
+                  >
+                    {selectedAvatar ? (
+                      <img
+                        src={selectedAvatar}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-2xl font-bold text-white">
+                        {name?.[0]?.toUpperCase() || "U"}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-xs text-zinc-500 font-medium">Live Preview</span>
                 </div>
-                <span className="text-xs text-zinc-500 font-medium">Live Preview</span>
-              </div>
 
-              {/* Selector Panels */}
-              <div className="flex-1 space-y-4 w-full">
                 {/* Background Color Pickers */}
-                <div>
+                <div className="flex-1">
                   <p className="text-sm font-medium text-zinc-400 mb-2">Profile Theme Color</p>
                   <div className="flex flex-wrap gap-2">
                     {[
@@ -353,7 +353,7 @@ export default function SettingsPage() {
                         key={c.value}
                         type="button"
                         onClick={() => setSelectedColor(c.value)}
-                        className={`w-8 h-8 rounded-full border transition-all cursor-pointer relative flex items-center justify-center ${
+                        className={`w-8 h-8 rounded-full border transition-all cursor-pointer relative flex items-center justify-center shrink-0 ${
                           selectedColor === c.value 
                             ? "border-white scale-110" 
                             : "border-transparent hover:scale-105"
@@ -368,7 +368,10 @@ export default function SettingsPage() {
                     ))}
                   </div>
                 </div>
+              </div>
 
+              {/* Bottom Row: Selector Panels */}
+              <div className="w-full space-y-4">
                 {/* Avatar Categories */}
                 <div>
                   <p className="text-sm font-medium text-zinc-400 mb-2">Avatar Style</p>
@@ -391,7 +394,7 @@ export default function SettingsPage() {
                 </div>
 
                 {/* Avatars Grid */}
-                <div className="grid grid-cols-5 sm:grid-cols-8 gap-2 max-h-48 overflow-y-auto no-scrollbar p-2 bg-zinc-950/40 rounded-xl border border-zinc-800/80">
+                <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-6 xl:grid-cols-8 gap-2 max-h-48 overflow-y-auto no-scrollbar p-2 bg-zinc-950/40 rounded-xl border border-zinc-800/80">
                   {Array.from({ length: avatarCounts[avatarFolder] }).map((_, idx) => {
                     const path = `/avatars/${avatarFolder}/${idx + 1}.png`;
                     return (
@@ -463,7 +466,7 @@ export default function SettingsPage() {
             <button
               onClick={handleSaveProfile}
               disabled={loading}
-              className="w-full mt-4 px-6 py-3 bg-white text-black font-medium rounded-xl hover:bg-zinc-200 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+              className="w-full mt-4 px-6 py-3 bg-gradient-to-br from-emerald-500/20 to-transparent hover:from-emerald-500/30 hover:to-emerald-900/20 text-white border border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.15)] hover:shadow-[0_0_20px_rgba(16,185,129,0.25)] font-medium rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer active:scale-[0.99]"
             >
               <Save className="w-5 h-5" />
               {loading ? "Saving..." : "Save Changes"}
