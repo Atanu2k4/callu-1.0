@@ -235,18 +235,7 @@ export function DashboardSidebar() {
         "bg-black border-r border-zinc-900 h-full hidden md:flex flex-col pt-6 z-20 relative shrink-0 overflow-hidden"
       )}
     >
-        {/* Toggle Button */}
-      <button
-        onClick={toggleSidebar}
-        className={cn(
-          "absolute p-1.5 text-zinc-400 hover:text-white transition-all z-50 focus:outline-none cursor-pointer",
-          isCollapsed 
-            ? "top-20 left-1/2 -translate-x-1/2 bg-transparent hover:bg-zinc-800 rounded-md" 
-            : "top-8 right-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg shadow-sm"
-        )}
-      >
-        <ChevronLeft className={cn("w-4 h-4 transition-transform duration-300", isCollapsed && "rotate-180")} />
-      </button>
+
 
 
       <div className={cn("flex flex-col flex-1 min-h-0", isCollapsed ? "items-center px-2" : "px-6")}>
