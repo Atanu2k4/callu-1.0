@@ -20,7 +20,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     if (user && user.status === 'approved' && !socketRef.current) {
-      const serverUrl = import.meta.env.VITE_API_URL || "https://callu-production.up.railway.app";
+      const serverUrl = import.meta.env.VITE_API_URL || "https://callu.up.railway.app";
       console.log(`[Socket] Connecting to server at ${serverUrl}`);
       const newSocket = io(serverUrl, {
         path: "/socket.io",

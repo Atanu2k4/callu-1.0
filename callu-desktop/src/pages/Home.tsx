@@ -10,10 +10,18 @@ import { useNavigate } from "react-router-dom";
 import { LAST_ROUTE_KEY } from "../App";
 
 export default function Home() {
-  const [showApply, setShowApply] = useState(false);
-  const [showLogin, setShowLogin] = useState(false);
   const { user, isLoading } = useAuth();
   const navigate = useNavigate();
+
+  const handleOAuthLogin = () => {
+    const baseUrl = import.meta.env.VITE_API_URL || "https://callu.up.railway.app";
+    const loginUrl = `${baseUrl}/login`;
+    if (window.electron) {
+      window.electron.send("open-external-url", loginUrl);
+    } else {
+      window.open(loginUrl, "_blank");
+    }
+  };
 
   useEffect(() => {
     if (!isLoading && user) {
@@ -61,7 +69,7 @@ export default function Home() {
            <h1 className="text-3xl font-black tracking-tighter text-white">CALLU</h1>
            <div className="w-2 h-2 bg-emerald-500 rounded-full mt-3"></div>
         </div>
-        <MemberButton onClick={() => setShowLogin(true)} />
+        <MemberButton onClick={handleOAuthLogin} />
       </nav>
 
       <div className="relative z-10 flex flex-col items-center justify-start min-h-[70vh] px-4 text-center w-full max-w-5xl pt-5">
@@ -75,7 +83,7 @@ export default function Home() {
             Connect through voice, video, and serendipity.
         </p>
         
-        <StyledButton onClick={() => setShowApply(true)} />
+        <StyledButton onClick={handleOAuthLogin} />
 
         {/* Bento Grid Teaser */}
         <div className="mt-24 grid grid-cols-1 md:grid-cols-6 gap-6 w-full max-w-6xl px-4 pb-24">
@@ -180,8 +188,6 @@ export default function Home() {
         brandIcon={<Activity className="w-8 h-8 text-emerald-500" />}
       />
 
-      {showApply && <ApplyModal onClose={() => setShowApply(false)} />}
-      {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
     </main>
   );
 }

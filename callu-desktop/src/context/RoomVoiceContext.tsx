@@ -48,6 +48,10 @@ interface RoomVoiceContextType {
   setPttKeycode: (code: number) => void;
   isRecordingKeybind: boolean;
   setIsRecordingKeybind: (val: boolean) => void;
+  muteKeycode: number;
+  setMuteKeycode: (code: number) => void;
+  isRecordingMuteKeybind: boolean;
+  setIsRecordingMuteKeybind: (val: boolean) => void;
   userVolumes: Record<string, number>;
   userMutes: Record<string, boolean>;
   setUserVolume: (userId: string, volume: number) => void;
@@ -85,6 +89,10 @@ const RoomVoiceContext = createContext<RoomVoiceContextType>({
   setPttKeycode: () => {},
   isRecordingKeybind: false,
   setIsRecordingKeybind: () => {},
+  muteKeycode: 0,
+  setMuteKeycode: () => {},
+  isRecordingMuteKeybind: false,
+  setIsRecordingMuteKeybind: () => {},
   userVolumes: {},
   userMutes: {},
   setUserVolume: () => {},
@@ -160,6 +168,29 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
     return 29; // Default: Left Ctrl
   });
   const [isRecordingKeybind, setIsRecordingKeybind] = useState(false);
+  const [muteKeycode, setMuteKeycode] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("mute-keycode");
+      if (saved) return parseInt(saved, 10);
+    }
+    return 0; // 0 = not set
+  });
+  const [isRecordingMuteKeybind, setIsRecordingMuteKeybind] = useState(false);
+
+  // ─── Sync keybinds FROM server when user loads ───────────────────
+  useEffect(() => {
+    if (!user) return;
+    const serverPtt = (user as any).pttKeycode;
+    const serverMute = (user as any).muteKeycode;
+    if (serverPtt !== undefined && serverPtt !== null) {
+      setPttKeycode(serverPtt);
+      localStorage.setItem("ptt-keycode", String(serverPtt));
+    }
+    if (serverMute !== undefined && serverMute !== null) {
+      setMuteKeycode(serverMute);
+      if (serverMute > 0) localStorage.setItem("mute-keycode", String(serverMute));
+    }
+  }, [user?._id]);
   const [isDeafened, setIsDeafened] = useState(false);
   const [availableMics, setAvailableMics] = useState<MediaDeviceInfo[]>([]);
   const [availableSpeakers, setAvailableSpeakers] = useState<MediaDeviceInfo[]>([]);
@@ -190,6 +221,8 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
   const isPTTEnabledRef = useRef(isPTTEnabled);
   const pttKeycodeRef = useRef(pttKeycode);
   const isRecordingKeybindRef = useRef(isRecordingKeybind);
+  const muteKeycodeRef = useRef(muteKeycode);
+  const isRecordingMuteKeybindRef = useRef(isRecordingMuteKeybind);
   const isDeafenedRef = useRef(false);
   const isVoiceConnectedRef = useRef(false);
   const selectedSpeakerIdRef = useRef<string | null>(null);
@@ -235,13 +268,66 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
     }
   }, [isPTTEnabled]);
 
+  // ─── Helper: save keybinds to server (fire-and-forget) ──────────
+  const saveKeybindsToServer = (ptt: number, mute: number) => {
+    const session = localStorage.getItem("callu_session");
+    if (!session) return;
+    let token = "";
+    try { token = JSON.parse(session).token; } catch { return; }
+    if (!token) return;
+    const baseUrl = import.meta.env.VITE_API_URL || "https://callu.up.railway.app";
+    fetch(`${baseUrl}/api/users/keybinds`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, pttKeycode: ptt, muteKeycode: mute }),
+    }).catch(() => {});
+  };
+
   useEffect(() => {
     pttKeycodeRef.current = pttKeycode;
     localStorage.setItem("ptt-keycode", pttKeycode.toString());
+    saveKeybindsToServer(pttKeycode, muteKeycodeRef.current);
   }, [pttKeycode]);
   useEffect(() => {
     isRecordingKeybindRef.current = isRecordingKeybind;
   }, [isRecordingKeybind]);
+  useEffect(() => {
+    muteKeycodeRef.current = muteKeycode;
+    if (muteKeycode > 0) localStorage.setItem("mute-keycode", muteKeycode.toString());
+    saveKeybindsToServer(pttKeycodeRef.current, muteKeycode);
+  }, [muteKeycode]);
+  useEffect(() => {
+    isRecordingMuteKeybindRef.current = isRecordingMuteKeybind;
+  }, [isRecordingMuteKeybind]);
+
+  // Keybind recording for mute toggle
+  useEffect(() => {
+    if (!isRecordingMuteKeybind) return;
+    const codeToScanCode: Record<string, number> = {
+      "Escape": 1, "Digit1": 2, "Digit2": 3, "Digit3": 4, "Digit4": 5, "Digit5": 6, "Digit6": 7, "Digit7": 8, "Digit8": 9, "Digit9": 10, "Digit0": 11,
+      "Minus": 12, "Equal": 13, "Backspace": 14, "Tab": 15,
+      "KeyQ": 16, "KeyW": 17, "KeyE": 18, "KeyR": 19, "KeyT": 20, "KeyY": 21, "KeyU": 22, "KeyI": 23, "KeyO": 24, "KeyP": 25,
+      "BracketLeft": 26, "BracketRight": 27, "Enter": 28, "ControlLeft": 29,
+      "KeyA": 30, "KeyS": 31, "KeyD": 32, "KeyF": 33, "KeyG": 34, "KeyH": 35, "KeyJ": 36, "KeyK": 37, "KeyL": 38,
+      "Semicolon": 39, "Quote": 40, "Backquote": 41, "ShiftLeft": 42, "Backslash": 43,
+      "KeyZ": 44, "KeyX": 45, "KeyC": 46, "KeyV": 47, "KeyB": 48, "KeyN": 49, "KeyM": 50,
+      "Comma": 51, "Period": 52, "Slash": 53, "ShiftRight": 54, "AltLeft": 56, "Space": 57, "CapsLock": 58,
+      "F1": 59, "F2": 60, "F3": 61, "F4": 62, "F5": 63, "F6": 64, "F7": 65, "F8": 66, "F9": 67, "F10": 68,
+      "F11": 87, "F12": 88, "ControlRight": 3613, "AltRight": 3640,
+      "ArrowUp": 57416, "ArrowLeft": 57419, "ArrowRight": 57421, "ArrowDown": 57424,
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const matched = codeToScanCode[e.code];
+      if (matched) {
+        setMuteKeycode(matched);
+        setIsRecordingMuteKeybind(false);
+      }
+    };
+    window.addEventListener("keydown", handleKey, { capture: true });
+    return () => window.removeEventListener("keydown", handleKey, { capture: true });
+  }, [isRecordingMuteKeybind]);
 
   // Native browser fallback key listener for flawless, instant keybind recording
   useEffect(() => {
@@ -492,7 +578,7 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
       const u = userRef.current;
       const s = socketRef.current;
       if (u && rid) {
-        const baseUrl = import.meta.env.VITE_API_URL || "https://callu-production.up.railway.app";
+        const baseUrl = import.meta.env.VITE_API_URL || "https://callu.up.railway.app";
         navigator.sendBeacon(
           `${baseUrl}/api/rooms/leave`,
           new Blob([JSON.stringify({ roomId: rid, userId: u._id })], { type: "application/json" })
@@ -1261,6 +1347,11 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
         setIsRecordingKeybind(false);
         return;
       }
+      // Toggle mute keybind (global, works even without PTT)
+      if (!isRecordingMuteKeybindRef.current && muteKeycodeRef.current > 0 && data.keycode === muteKeycodeRef.current && isVoiceConnectedRef.current) {
+        toggleMute();
+        return;
+      }
 
       if (!isPTTEnabledRef.current) return;
       if (data.keycode === pttKeycodeRef.current) {
@@ -1318,6 +1409,13 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
     const handleBrowserKeyDownForPTT = (e: KeyboardEvent) => {
       const scanCode = BROWSER_CODE_TO_SCANCODE[e.code];
       if (scanCode === undefined) return;
+      // Toggle mute keybind
+      if (!isRecordingMuteKeybindRef.current && muteKeycodeRef.current > 0 && scanCode === muteKeycodeRef.current && isVoiceConnectedRef.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleMute();
+        return;
+      }
       if (!isRecordingKeybindRef.current && isPTTEnabledRef.current && scanCode === pttKeycodeRef.current) {
         e.preventDefault();
         e.stopPropagation();
@@ -1381,6 +1479,10 @@ export const RoomVoiceProvider = ({ children }: { children: React.ReactNode }) =
         setPttKeycode,
         isRecordingKeybind,
         setIsRecordingKeybind,
+        muteKeycode,
+        setMuteKeycode,
+        isRecordingMuteKeybind,
+        setIsRecordingMuteKeybind,
         userVolumes,
         userMutes,
         setUserVolume,

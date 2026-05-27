@@ -18,6 +18,8 @@ const ALLOWED_CHANNELS = [
   "install-update",
   "get-app-version",
   "update-status",
+  "oauth-token",
+  "open-external-url",
 ];
 
 contextBridge.exposeInMainWorld("electron", {

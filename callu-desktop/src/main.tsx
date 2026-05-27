@@ -58,7 +58,7 @@ async function bootstrap() {
   const originalFetch = window.fetch;
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     let url = typeof input === "string" ? input : (input instanceof URL ? input.href : (input as Request).url);
-    const baseUrl = import.meta.env.VITE_API_URL || "https://callu-production.up.railway.app";
+    const baseUrl = import.meta.env.VITE_API_URL || "https://callu.up.railway.app";
 
     if (url.includes("/api/") && !url.startsWith(baseUrl)) {
       const apiIndex = url.indexOf("/api/");

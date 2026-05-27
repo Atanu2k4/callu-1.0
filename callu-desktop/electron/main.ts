@@ -73,7 +73,7 @@ const getStoredSessionToken = (): string | null => {
 async function fetchAndApplyGithubToken(sessionToken: string | null) {
   if (!sessionToken) return;
   try {
-    const backendUrl = process.env.VITE_API_URL || "https://callu-production.up.railway.app";
+    const backendUrl = process.env.VITE_API_URL || "https://callu.up.railway.app";
     const response = await net.fetch(`${backendUrl}/api/auth/github-token`, {
       method: "POST",
       headers: {
@@ -205,6 +205,12 @@ function createMainWindow() {
   // Setup other IPC modules
   setupMediaIPC(mainWindow);
   setupPTTIPC(mainWindow);
+
+  ipcMain.on("open-external-url", (event, url) => {
+    import("electron").then(({ shell }) => {
+      shell.openExternal(url);
+    });
+  });
 
   // Secure session storage handlers
   ipcMain.handle("get-secure-session", () => {
@@ -387,6 +393,57 @@ async function setupAutoUpdater() {
   }, 60 * 60 * 1000);
 }
 
+// --- Deep Link / Protocol Handler ---
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient("callu", process.execPath, [path.resolve(process.argv[1])]);
+  }
+} else {
+  app.setAsDefaultProtocolClient("callu");
+}
+
+function handleDeepLink(urlStr: string) {
+  try {
+    const parsed = new URL(urlStr);
+    if (parsed.protocol === "callu:" && parsed.hostname === "auth") {
+      const token = parsed.searchParams.get("token");
+      if (token && mainWindow) {
+        // Send token to renderer
+        mainWindow.webContents.send("oauth-token", token);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to parse deep link:", err);
+  }
+}
+
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (event, commandLine, workingDirectory) => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    const url = commandLine.find((arg) => arg.startsWith("callu://"));
+    if (url) {
+      handleDeepLink(url);
+    }
+  });
+}
+
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+  handleDeepLink(url);
+});
+
 app.on("ready", () => {
   // Set AppUserModelId for Windows taskbar icon grouping support
   app.setAppUserModelId("com.callu.desktop");
@@ -450,7 +507,7 @@ app.on("ready", () => {
           }
           
           // Fallback to remote production server
-          const backendUrl = process.env.VITE_API_URL || "https://callu-production.up.railway.app";
+          const backendUrl = process.env.VITE_API_URL || "https://callu.up.railway.app";
           const redirectURL = `${backendUrl}/${relativePath}`;
           console.log(`[Asset Redirect] Remote Fallback: ${urlStr} -> ${redirectURL}`);
           callback({ redirectURL });
